@@ -1,0 +1,131 @@
+{
+  "skills": {
+    "acr": {
+      "key": "acrobatics",
+      "label_zh": "杂技",
+      "label_en": "Acrobatics",
+      "ability": "dex"
+    },
+    "ani": {
+      "key": "animal_handling",
+      "label_zh": "驯兽",
+      "label_en": "Animal Handling",
+      "ability": "wis"
+    },
+    "arc": {
+      "key": "arcana",
+      "label_zh": "奥秘",
+      "label_en": "Arcana",
+      "ability": "int"
+    },
+    "ath": {
+      "key": "athletics",
+      "label_zh": "运动",
+      "label_en": "Athletics",
+      "ability": "str"
+    },
+    "dec": {
+      "key": "deception",
+      "label_zh": "欺瞒",
+      "label_en": "Deception",
+      "ability": "cha"
+    },
+    "his": {
+      "key": "history",
+      "label_zh": "历史",
+      "label_en": "History",
+      "ability": "int"
+    },
+    "ins": {
+      "key": "insight",
+      "label_zh": "洞悉",
+      "label_en": "Insight",
+      "ability": "wis"
+    },
+    "itm": {
+      "key": "intimidation",
+      "label_zh": "威吓",
+      "label_en": "Intimidation",
+      "ability": "cha"
+    },
+    "inv": {
+      "key": "investigation",
+      "label_zh": "调查",
+      "label_en": "Investigation",
+      "ability": "int"
+    },
+    "med": {
+      "key": "medicine",
+      "label_zh": "医药",
+      "label_en": "Medicine",
+      "ability": "wis"
+    },
+    "nat": {
+      "key": "nature",
+      "label_zh": "自然",
+      "label_en": "Nature",
+      "ability": "int"
+    },
+    "prc": {
+      "key": "perception",
+      "label_zh": "察觉",
+      "label_en": "Perception",
+      "ability": "wis"
+    },
+    "prf": {
+      "key": "performance",
+      "label_zh": "表演",
+      "label_en": "Performance",
+      "ability": "cha"
+    },
+    "per": {
+      "key": "persuasion",
+      "label_zh": "说服",
+      "label_en": "Persuasion",
+      "ability": "cha"
+    },
+    "rel": {
+      "key": "religion",
+      "label_zh": "宗教",
+      "label_en": "Religion",
+      "ability": "int"
+    },
+    "slt": {
+      "key": "sleight_of_hand",
+      "label_zh": "巧手",
+      "label_en": "Sleight of Hand",
+      "ability": "dex"
+    },
+    "ste": {
+      "key": "stealth",
+      "label_zh": "隐匿",
+      "label_en": "Stealth",
+      "ability": "dex"
+    },
+    "sur": {
+      "key": "survival",
+      "label_zh": "生存",
+      "label_en": "Survival",
+      "ability": "wis"
+    }
+  },
+  "aliases": {
+    "潜行": "ste",
+    "stealth": "ste",
+    "调查": "inv",
+    "investigation": "inv",
+    "察觉": "prc",
+    "perception": "prc",
+    "说服": "per",
+    "persuasion": "per",
+    "欺瞒": "dec",
+    "deception": "dec",
+    "威吓": "itm",
+    "intimidation": "itm",
+    "运动": "ath",
+    "athletics": "ath",
+    "杂技": "acr",
+    "acrobatics": "acr",
+    "隐匿": "ste"
+  }
+}

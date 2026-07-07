@@ -1,63 +1,90 @@
-# StoryForge
+# StoryForge 灵境档案
 
-> 故事创作与管理的工具平台（项目初始化阶段）
+> AI 驱动的轻量化单人跑团平台 — 角色创建、 d20 判定、剧情推进、本局总结
 
-StoryForge 旨在帮助创作者高效地构思、编写、组织与管理故事内容。本项目目前处于从零搭建阶段，文档与 Git 工作流已就绪，后续将逐步补充技术实现。
+StoryForge 面向跑团、互动小说与创意叙事场景，将 **AI 叙事**、**D&D 5e SRD 规则判定** 与 **会话持久化** 整合为完整 Web 体验。规则数据来自 Foundry VTT dnd5e 6.0.x（SRD 5.1），详见 [实现规格书](docs/implementation-spec.md) 与 [D&D 5e 整合说明](docs/dnd5e-integration.md)。
+
+## 核心流程
+
+```
+选择世界观 → 创建角色 → AI 开局 → 玩家行动 → d20 判定 → AI 推进 → 本局总结
+```
 
 ## 功能规划
 
-- [ ] 故事项目管理（创建、编辑、归档）
-- [ ] 章节与大纲编辑
-- [ ] 角色与世界观设定
-- [ ] 版本历史与导出
+### P0（MVP）
 
-> 以上为初步规划，可根据实际需求调整。
+- [ ] 用户登录/注册
+- [ ] 世界观选择与 **D&D 5e 角色创建**（种族/职业/背景/技能/属性雷达图）
+- [ ] AI 开局剧情生成
+- [ ] 跑团主界面（三栏：状态 / 对话 / 骰子与日志）
+- [ ] 行动判定（d20 + 属性修正）
+- [ ] 本局总结报告
+
+### P1（加分）
+
+- [ ] 线索与任务面板
+- [ ] 历史档案
+- [ ] ECharts 统计图表
+- [ ] 管理端数据展示
 
 ## 快速开始
 
 详细步骤见 [docs/getting-started.md](docs/getting-started.md)。
 
 ```bash
-# 克隆仓库
 git clone https://github.com/AOC2334/StoryForge.git
 cd StoryForge
 
-# 后续：安装依赖、启动开发环境（待技术栈确定后补充）
+# 复制环境变量模板
+./scripts/setup-env.sh          # Windows: .\scripts\setup-env.ps1
+# 编辑 .env，填写 LLM_API_KEY
+
+# 后端（FastAPI）
+cd backend && pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 前端（Vue 3）
+cd frontend && npm install && npm run dev
 ```
+
+> 后端与前端目录将在首轮开发中创建，启动命令以 [实现规格书](docs/implementation-spec.md#12-环境配置与本地启动) 为准。
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
+| [实现规格书](docs/implementation-spec.md) | **主文档**：API、DDL、AI Schema、里程碑 |
+| [D&D 5e 规则整合](docs/dnd5e-integration.md) | SRD 规则数据与角色创建流程 |
+| [架构设计](docs/architecture.md) | 系统分层与模块划分 |
 | [快速开始](docs/getting-started.md) | 环境准备与本地运行 |
-| [架构设计](docs/architecture.md) | 系统结构与模块划分 |
 | [开发指南](docs/development.md) | 分支、提交与代码规范 |
 | [贡献指南](CONTRIBUTING.md) | 如何参与贡献 |
 | [更新日志](CHANGELOG.md) | 版本变更记录 |
 
 ## 技术栈
 
-> 待确定。选定后请更新本节及 `docs/architecture.md`。
-
 | 层级 | 技术 |
 |------|------|
-| 前端 | TBD |
-| 后端 | TBD |
-| 数据库 | TBD |
-| 部署 | TBD |
+| 前端 | Vue 3 + Pinia + Vue Router + ECharts |
+| 后端 | FastAPI + SQLAlchemy |
+| 数据库 | SQLite（开发）/ MySQL（可选） |
+| AI | OpenAI 兼容 API（通义 / DeepSeek 等） |
+| 认证 | JWT |
 
-## 项目结构
+## 项目结构（目标态）
 
 ```
 StoryForge/
-├── docs/                 # 项目文档
-├── .github/              # GitHub 模板与工作流（可选）
+├── frontend/             # Vue 3 前端
+├── backend/              # FastAPI 后端
+├── rules/dnd5e/          # D&D 5e SRD 规则 JSON（已提取）
+├── scripts/              # 规则提取等工具脚本
+├── docs/
+│   ├── implementation-spec.md
+│   └── architecture.md
 ├── README.md
-├── CONTRIBUTING.md
-├── CHANGELOG.md
-├── LICENSE
-├── .gitignore
-└── .gitattributes
+└── .env.example
 ```
 
 ## 许可证
@@ -66,5 +93,4 @@ StoryForge/
 
 ## 联系方式
 
-- 维护者：TBD
 - Issue：[GitHub Issues](https://github.com/AOC2334/StoryForge/issues)

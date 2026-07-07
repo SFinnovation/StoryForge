@@ -73,8 +73,11 @@ docs: update getting-started guide
 
 ## 环境变量
 
-- 敏感配置放在 `.env`，并提供 `.env.example` 模板
+- 敏感配置放在 `.env`，模板见根目录 `.env.example` 与 `frontend/.env.example`
+- 一键复制：`./scripts/setup-env.sh`（Windows：`.\scripts\setup-env.ps1`）
+- **必填**：`LLM_API_KEY`（大模型）、生产环境的 `SECRET_KEY`
 - 禁止将 `.env`、密钥、证书提交到 Git
+- 详细说明见 [快速开始 — 环境变量配置](getting-started.md#环境变量配置)
 
 ## 本地 Git 建议（Windows）
 

@@ -1,0 +1,18 @@
+{
+  "backgrounds": [
+    {
+      "id": "acolyte",
+      "name_en": "Acolyte",
+      "name_zh": "Acolyte",
+      "skill_proficiencies": [
+        "ins",
+        "rel"
+      ],
+      "languages": {
+        "grants": [],
+        "choices": 2
+      },
+      "description_text": "You have spent your life in the service of a temple to a specific god or pantheon of gods. You act as an intermediary between the realm of the holy and the mortal world, performing sacred rites and offering sacrifices in order to conduct worshipers into the presence of the divine. You are not necessarily a cleric—performing sacred rites is not the same thing as channeling divine power.   Choose a "
+    }
+  ]
+}

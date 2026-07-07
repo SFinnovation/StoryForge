@@ -1,0 +1,197 @@
+{
+  "races": [
+    {
+      "id": "dragonborn",
+      "name_en": "Dragonborn",
+      "name_zh": "Dragonborn",
+      "ability_increases": {
+        "strength": 2,
+        "charisma": 1
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:exotic:draconic"
+        ],
+        "choices": 0
+      },
+      "description_text": "Your draconic heritage manifests in a variety of traits you share with other dragonborn.    Ability Score Increase.   Your Strength score increases by 2, and your Charisma score increases by 1.    Age.   Young dragonborn grow quickly. They walk hours after hatching, attain the size and development of a 10-­year-­old human child by the age of 3, and reach adulthood by 15. They live to be around 80."
+    },
+    {
+      "id": "hill-dwarf",
+      "name_en": "Hill Dwarf",
+      "name_zh": "Hill Dwarf",
+      "ability_increases": {
+        "constitution": 2,
+        "wisdom": 1
+      },
+      "speed": 25,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:dwarvish"
+        ],
+        "choices": 0
+      },
+      "description_text": "Your dwarf character has an assortment of inborn abilities, part and parcel of dwarven nature.    Ability Score Increase.  Your Constitution score increases by 2.   Age.  Dwarves mature at the same rate as humans, but they're considered young until they reach the age of 50. On average, they live about 350 years.   Alignment.  Most dwarves are lawful, believing firmly in the benefits of a well-orde"
+    },
+    {
+      "id": "half-elf",
+      "name_en": "Half-Elf",
+      "name_zh": "Half-Elf",
+      "ability_increases": {
+        "charisma": 2
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [
+        {
+          "choose": 2,
+          "from": [
+            "*"
+          ]
+        }
+      ],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:elvish"
+        ],
+        "choices": 1
+      },
+      "description_text": "Your half‑elf character has some qualities in common with elves and some that are unique to half-­elves.    Ability Score Increase.   Your Charisma score increases by 2, and two other ability scores of your choice increase by 1.    Age.   Half-­elves mature at the same rate humans do and reach adulthood around the age of 20. They live much longer than humans, however, often exceeding 180 years.   "
+    },
+    {
+      "id": "high-elf",
+      "name_en": "High Elf",
+      "name_zh": "High Elf",
+      "ability_increases": {
+        "dexterity": 2,
+        "intelligence": 1
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [
+        "prc"
+      ],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:elvish"
+        ],
+        "choices": 1
+      },
+      "description_text": "Your elf character has a variety of natural abilities, the result of thousands of years of elven refinement.    Ability Score Increase.   Your Dexterity score increases by 2.    Age.   Although elves reach physical maturity at about the same age as humans, the elven understanding of adulthood goes beyond physical growth to encompass worldly experience. An elf typically claims adulthood and an adul"
+    },
+    {
+      "id": "rock-gnome",
+      "name_en": "Rock Gnome",
+      "name_zh": "Rock Gnome",
+      "ability_increases": {
+        "constitution": 1,
+        "intelligence": 2
+      },
+      "speed": 25,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:gnomish"
+        ],
+        "choices": 0
+      },
+      "description_text": "Your gnome character has certain characteristics in common with all other gnomes.    Ability Score Increase.   Your Intelligence score increases by 2.    Age.   Gnomes mature at the same rate humans do, and most are expected to settle down into an adult life by around age 40. They can live 350 to almost 500 years.    Alignment.   Gnomes are most often good. Those who tend toward law are sages, eng"
+    },
+    {
+      "id": "lightfoot-halfling",
+      "name_en": "Lightfoot Halfling",
+      "name_zh": "Lightfoot Halfling",
+      "ability_increases": {
+        "dexterity": 2,
+        "charisma": 1
+      },
+      "speed": 25,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:halfling"
+        ],
+        "choices": 0
+      },
+      "description_text": "Your halfling character has a number of traits in common with all other halflings.    Ability Score Increase.   Your Dexterity score increases by 2.    Age.   A halfling reaches adulthood at the age of 20 and generally lives into the middle of his or her second century.    Alignment.   Most halflings are lawful good. As a rule, they are good-hearted and kind, hate to see others in pain, and have n"
+    },
+    {
+      "id": "human",
+      "name_en": "Human",
+      "name_zh": "Human",
+      "ability_increases": {
+        "strength": 1,
+        "dexterity": 1,
+        "constitution": 1,
+        "intelligence": 1,
+        "wisdom": 1,
+        "charisma": 1
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common"
+        ],
+        "choices": 1
+      },
+      "description_text": "It's hard to make generalizations about humans, but your human character has these traits.    Ability Score Increase.   Your ability scores each increase by 1.    Age.   Humans reach adulthood in their late teens and live less than a century.    Alignment.   Humans tend toward no particular alignment. The best and the worst are found among them.    Size.   Humans vary widely in height and build, f"
+    },
+    {
+      "id": "half-orc",
+      "name_en": "Half-Orc",
+      "name_zh": "Half-Orc",
+      "ability_increases": {
+        "strength": 2,
+        "constitution": 1
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [
+        "itm"
+      ],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:standard:orc"
+        ],
+        "choices": 0
+      },
+      "description_text": "Your half-orc character has certain traits deriving from your orc ancestry.    Ability Score Increase.   Your Strength score increases by 2, and your Constitution score increases by 1.    Age.   Half-­orcs mature a little faster than humans, reaching adulthood around age 14. They age noticeably faster and rarely live longer than 75 years.    Alignment.   Half-orcs inherit a tendency toward chaos f"
+    },
+    {
+      "id": "tiefling",
+      "name_en": "Tiefling",
+      "name_zh": "Tiefling",
+      "ability_increases": {
+        "intelligence": 1,
+        "charisma": 2
+      },
+      "speed": 30,
+      "size": "medium",
+      "skill_proficiencies": [],
+      "languages": {
+        "grants": [
+          "languages:standard:common",
+          "languages:exotic:infernal"
+        ],
+        "choices": 0
+      },
+      "description_text": "Tieflings share certain racial traits as a result of their infernal descent.    Ability Score Increase.   Your Intelligence score increases by 1, and your Charisma score increases by 2.    Age.   Tieflings mature at the same rate as humans but live a few years longer.    Alignment.   Tieflings might not have an innate tendency toward evil, but many of them end up there. Evil or not, an independent"
+    }
+  ]
+}

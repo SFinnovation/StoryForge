@@ -1,0 +1,38 @@
+{
+  "str": {
+    "key": "strength",
+    "label_zh": "力量",
+    "label_en": "Strength",
+    "type": "physical"
+  },
+  "dex": {
+    "key": "dexterity",
+    "label_zh": "敏捷",
+    "label_en": "Dexterity",
+    "type": "physical"
+  },
+  "con": {
+    "key": "constitution",
+    "label_zh": "体质",
+    "label_en": "Constitution",
+    "type": "physical"
+  },
+  "int": {
+    "key": "intelligence",
+    "label_zh": "智力",
+    "label_en": "Intelligence",
+    "type": "mental"
+  },
+  "wis": {
+    "key": "wisdom",
+    "label_zh": "感知",
+    "label_en": "Wisdom",
+    "type": "mental"
+  },
+  "cha": {
+    "key": "charisma",
+    "label_zh": "魅力",
+    "label_en": "Charisma",
+    "type": "mental"
+  }
+}

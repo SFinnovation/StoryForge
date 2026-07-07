@@ -1,0 +1,87 @@
+{
+  "source": "Foundry VTT dnd5e 6.0.x (SRD 5.1, CC-BY-4.0)",
+  "max_level": 20,
+  "max_ability_score": 20,
+  "ability_modifier_formula": "floor((score - 10) / 2)",
+  "standard_array": [
+    15,
+    14,
+    13,
+    12,
+    10,
+    8
+  ],
+  "point_buy": {
+    "total_points": 27,
+    "min_score": 8,
+    "max_score_before_racial": 15
+  },
+  "proficiency_bonus_by_level": {
+    "1": 2,
+    "2": 2,
+    "3": 2,
+    "4": 2,
+    "5": 3,
+    "6": 3,
+    "7": 3,
+    "8": 3,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 5,
+    "14": 5,
+    "15": 5,
+    "16": 5,
+    "17": 6,
+    "18": 6,
+    "19": 6,
+    "20": 6
+  },
+  "character_exp_levels": [
+    0,
+    300,
+    900,
+    2700,
+    6500,
+    14000,
+    23000,
+    34000,
+    48000,
+    64000,
+    85000,
+    100000,
+    120000,
+    140000,
+    165000,
+    195000,
+    225000,
+    265000,
+    305000,
+    355000
+  ],
+  "dc_by_difficulty": {
+    "very_easy": 5,
+    "easy": 10,
+    "medium": 15,
+    "hard": 20,
+    "very_hard": 25,
+    "nearly_impossible": 30
+  },
+  "check_formula": "d20 + ability_modifier + proficiency_bonus + other >= dc",
+  "passive_score_base": 10,
+  "advantage_disadvantage_passive_modifier": 5,
+  "default_abilities": {
+    "melee_attack": "strength",
+    "ranged_attack": "dexterity",
+    "initiative": "dexterity",
+    "hit_points": "constitution",
+    "concentration": "constitution"
+  },
+  "proficiency_levels": {
+    "0": "none",
+    "0.5": "half",
+    "1": "proficient",
+    "2": "expertise"
+  }
+}
