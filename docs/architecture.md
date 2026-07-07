@@ -66,8 +66,8 @@ StoryForge 灵境档案采用 **前后端分离** 架构，核心创新在于将
 
 ### 7. AI 编排（AI Service）
 
-- 开局生成、行动理解、判定后叙事、本局总结
-- 输出统一 JSON，Pydantic 校验
+- 双 Agent：Narrative + Critic + Revision Loop
+- 详见 [ai-module-design.md](ai-module-design.md)
 
 ### 8. 报告与可视化（Report + Admin）
 

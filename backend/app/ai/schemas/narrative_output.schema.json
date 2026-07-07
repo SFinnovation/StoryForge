@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NarrativeAgentOutput",
+  "type": "object",
+  "required": ["narration", "visible_result", "new_clues", "state_updates", "next_options"],
+  "properties": {
+    "narration": { "type": "string" },
+    "visible_result": { "type": "string" },
+    "new_clues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "content"],
+        "properties": {
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "importance": { "enum": ["normal", "important", "key"] },
+          "visibility": { "enum": ["player_known"] }
+        }
+      }
+    },
+    "state_updates": {
+      "type": "object",
+      "properties": {
+        "scene": { "type": ["string", "null"] },
+        "summary_delta": { "type": "string" },
+        "hp_delta": { "type": "integer" },
+        "npc_alertness": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "npc_id": { "type": "string" },
+              "delta": { "type": "integer", "minimum": -3, "maximum": 3 }
+            }
+          }
+        },
+        "task_updates": { "type": "array" },
+        "new_facts": { "type": "array" }
+      }
+    },
+    "next_options": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+  }
+}

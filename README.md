@@ -54,7 +54,8 @@ cd frontend && npm install && npm run dev
 
 | 文档 | 说明 |
 |------|------|
-| [实现规格书](docs/implementation-spec.md) | **主文档**：API、DDL、AI Schema、里程碑 |
+| [AI 模块设计](docs/ai-module-design.md) | **双 Agent 架构**、接口预留、Fact 分层 |
+| [实现规格书](docs/implementation-spec.md) | API、DDL、里程碑 |
 | [D&D 5e 规则整合](docs/dnd5e-integration.md) | SRD 规则数据与角色创建流程 |
 | [架构设计](docs/architecture.md) | 系统分层与模块划分 |
 | [快速开始](docs/getting-started.md) | 环境准备与本地运行 |

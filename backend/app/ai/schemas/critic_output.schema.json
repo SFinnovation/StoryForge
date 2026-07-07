@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CriticAgentOutput",
+  "type": "object",
+  "required": ["approved", "overall_score", "scores", "fatal_errors", "revision_instructions"],
+  "properties": {
+    "approved": { "type": "boolean" },
+    "overall_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "scores": {
+      "type": "object",
+      "required": [
+        "rule_consistency",
+        "world_consistency",
+        "context_continuity",
+        "character_alignment",
+        "npc_knowledge_boundary",
+        "clue_progression"
+      ],
+      "properties": {
+        "rule_consistency": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "world_consistency": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "context_continuity": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "character_alignment": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "npc_knowledge_boundary": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "clue_progression": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "fatal_errors": { "type": "array", "items": { "type": "string" } },
+    "revision_instructions": { "type": "array", "items": { "type": "string" } }
+  }
+}
