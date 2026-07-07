@@ -1,0 +1,84 @@
+# 依赖
+node_modules/
+vendor/
+.pnp/
+.pnp.js
+
+# 构建产物
+dist/
+build/
+out/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# IDE 与编辑器
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志与临时文件
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# 测试与覆盖率
+coverage/
+*.cover
+.nyc_output/
+htmlcov/
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# 本地数据与数据库
+*.db
+*.sqlite
+*.sqlite3
+data/
+uploads/

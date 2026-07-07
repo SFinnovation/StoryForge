@@ -1,0 +1,14 @@
+# 统一行尾，避免 Windows / macOS / Linux 混用时的 diff 噪音
+* text=auto eol=lf
+
+# 二进制文件不参与 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.woff binary
+*.woff2 binary
