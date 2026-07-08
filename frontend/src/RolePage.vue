@@ -1,7 +1,9 @@
 ﻿<script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import { charactersApi, sessionsApi, worldsApi } from './api/client'
+import systemBackground from '../背景/系统主界面.png'
 
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(['navigate', 'session-created'])
 
 const props = defineProps({
   currentPage: {
@@ -11,10 +13,17 @@ const props = defineProps({
   worldview: {
     type: Object,
     default: null
+  },
+  currentUser: {
+    type: Object,
+    default: null
   }
 })
 
 const activeNav = ref(props.currentPage)
+const createStatus = ref('')
+const isSubmitting = ref(false)
+const worldviewTitle = computed(() => props.worldview?.title || props.worldview?.name || '')
 
 const handleNavigate = (page) => {
   activeNav.value = page
@@ -67,20 +76,20 @@ const attributes = reactive([])
 
 const isCocSystem = computed(() => {
   if (!props.worldview) return true
-  return props.worldview.title.includes('COC')
+  return worldviewTitle.value.includes('COC')
 })
 
 const pageTitle = computed(() => {
   if (!props.worldview) return '调查员创建室'
-  if (props.worldview.title.includes('COC')) return '调查员创建室'
-  if (props.worldview.title.includes('DND')) return '冒险者创建室'
+  if (worldviewTitle.value.includes('COC')) return '调查员创建室'
+  if (worldviewTitle.value.includes('DND')) return '冒险者创建室'
   return '角色创建室'
 })
 
 const pageSubtitle = computed(() => {
   if (!props.worldview) return '按照 COC 7th 快速开始规则，建立你的调查员档案'
-  if (props.worldview.title.includes('COC')) return '按照 COC 7th 快速开始规则，建立你的调查员档案'
-  if (props.worldview.title.includes('DND')) return '按照 DND 5e 规则，创建你的冒险者角色'
+  if (worldviewTitle.value.includes('COC')) return '按照 COC 7th 快速开始规则，建立你的调查员档案'
+  if (worldviewTitle.value.includes('DND')) return '按照 DND 5e 规则，创建你的冒险者角色'
   return '创建你的角色档案'
 })
 
@@ -93,7 +102,7 @@ const initAttributes = () => {
       attributes.push({ ...attr, value: null })
     })
   } else {
-    availableValues.value = [8, 10, 10, 12, 12, 15]
+    availableValues.value = [8, 10, 12, 13, 14, 15]
     dndAttributes.forEach(attr => {
       attributes.push({ ...attr, value: null })
     })
@@ -195,11 +204,118 @@ const occupations = [
 ]
 
 const selectedOccupation = ref('')
+
+const classIdMap = {
+  战士: 'fighter',
+  法师: 'wizard',
+  牧师: 'cleric',
+  盗贼: 'rogue',
+  游侠: 'ranger',
+  吟游诗人: 'bard',
+  圣骑士: 'paladin',
+  德鲁伊: 'druid',
+  武僧: 'monk',
+  术士: 'warlock'
+}
+
+const getAttributeValue = (abbr, fallback) => attributes.find((attr) => attr.abbr === abbr)?.value || fallback
+
+const dndAttributesPayload = () => ({
+  strength: getAttributeValue('STR', 8),
+  dexterity: getAttributeValue('DEX', 15),
+  constitution: getAttributeValue('CON', 12),
+  intelligence: getAttributeValue('INT', 14),
+  wisdom: getAttributeValue('WIS', 13),
+  charisma: getAttributeValue('CHA', 10)
+})
+
+const cocAttributesPayload = () => ({
+  strength: Math.round(getAttributeValue('STR', 50) / 5),
+  dexterity: Math.round(getAttributeValue('DEX', 50) / 5),
+  constitution: Math.round(getAttributeValue('CON', 50) / 5),
+  intelligence: Math.round(getAttributeValue('INT', 50) / 5),
+  wisdom: Math.round(getAttributeValue('POW', 50) / 5),
+  charisma: Math.round(getAttributeValue('APP', 50) / 5)
+})
+
+const validateRequiredFields = () => {
+  if (!investigator.name.trim()) {
+    createStatus.value = '请先填写角色姓名。'
+    return false
+  }
+
+  if (attributes.some((attr) => attr.value === null)) {
+    createStatus.value = '请先完成全部属性分配。'
+    return false
+  }
+
+  return true
+}
+
+const resolveWorldId = async () => {
+  if (props.worldview?.backendId) return props.worldview.backendId
+  if (props.worldview?.source === 'backend' && props.worldview?.id) return props.worldview.id
+
+  const worlds = await worldsApi.list()
+  const dndWorld = worlds.find((world) => /krenko|克伦可|dnd|dragon|龙/i.test(world.name))
+  return dndWorld?.id || worlds[0]?.id || 1
+}
+
+const createCharacterPayload = () => {
+  if (isCocSystem.value) {
+    return {
+      name: investigator.name,
+      profession: selectedOccupation.value || investigator.occupation || 'investigator',
+      race_id: 'human',
+      background_id: null,
+      motivation: investigator.description || '追寻未知真相',
+      hp: Math.max(1, subAttributes.value.hp),
+      max_hp: Math.max(1, subAttributes.value.hp),
+      attributes: cocAttributesPayload()
+    }
+  }
+
+  return {
+    name: investigator.name,
+    race_id: 'high-elf',
+    class_id: classIdMap[selectedOccupation.value] || 'rogue',
+    background_id: 'acolyte',
+    motivation: investigator.description || '踏上新的冒险',
+    ability_assignment: 'standard_array',
+    base_attributes: dndAttributesPayload(),
+    selected_skills: []
+  }
+}
+
+const handleCreateCharacter = async () => {
+  createStatus.value = ''
+  if (!validateRequiredFields() || isSubmitting.value) return
+
+  isSubmitting.value = true
+  try {
+    const character = await charactersApi.create(createCharacterPayload())
+    const worldId = await resolveWorldId()
+    const sessionData = await sessionsApi.start({
+      world_id: worldId,
+      character_id: character.id
+    })
+
+    createStatus.value = '角色已创建，冒险会话已开启。'
+    emit('session-created', {
+      ...sessionData,
+      character
+    })
+  } catch (error) {
+    createStatus.value = error?.message || '角色创建失败，请检查属性与职业选择。'
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="role-page">
-    <div class="page-bg">
+    <div class="page-bg" :style="{ backgroundImage: `url(${systemBackground})` }">
       <div class="bg-overlay"></div>
       <div class="texture"></div>
       <div class="candles"></div>
@@ -422,7 +538,7 @@ const selectedOccupation = ref('')
           <div class="stats-panel">
             <div class="stats-header">
               <h3 class="panel-title">{{ isCocSystem ? '八大特征' : '六项属性' }}</h3>
-              <span class="stats-hint">{{ isCocSystem ? '分配数值: 40、50、50、50、60、60、70、80' : '分配数值: 8、10、10、12、12、15' }}</span>
+              <span class="stats-hint">{{ isCocSystem ? '分配数值: 40、50、50、50、60、60、70、80' : '分配数值: 8、10、12、13、14、15' }}</span>
             </div>
             <div class="attributes-list">
               <div
@@ -600,11 +716,12 @@ const selectedOccupation = ref('')
             <button class="btn-secondary" @click="console.log('保存草稿')">
               保存草稿
             </button>
-            <button class="btn-primary" @click="console.log('完成角色创建')">
+            <button class="btn-primary" :disabled="isSubmitting" @click="handleCreateCharacter">
               <span class="btn-icon">🎲</span>
-              {{ isCocSystem ? '完成调查员创建' : '完成冒险者创建' }}
+              {{ isSubmitting ? '正在创建...' : (isCocSystem ? '完成调查员创建' : '完成冒险者创建') }}
             </button>
           </div>
+          <p v-if="createStatus" class="create-status">{{ createStatus }}</p>
         </div>
       </div>
     </main>
@@ -625,7 +742,6 @@ const selectedOccupation = ref('')
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: url('/src/assets/auth-bg.png');
   background-size: cover;
   background-position: center;
   z-index: 0;
@@ -1841,8 +1957,21 @@ const selectedOccupation = ref('')
   box-shadow: 0 0 50px rgba(245, 185, 91, 0.5);
 }
 
+.btn-primary:disabled {
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+
 .btn-icon {
   font-size: 18px;
+}
+
+.create-status {
+  margin-top: 14px;
+  color: #f5b95b;
+  text-align: right;
+  font-size: 13px;
 }
 
 @media (max-width: 1200px) {

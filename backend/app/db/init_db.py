@@ -57,29 +57,60 @@ def init_db(drop_first: bool = False) -> None:
 
 
 def seed_demo_data() -> None:
-    from backend.app.services.world_seed import MODULE_DATA
-
-    world_names = list(MODULE_DATA.keys()) or ["Demo World"]
-    while len(world_names) < 2:
-        world_names.append(f"Demo World {len(world_names) + 1}")
+    demo_worlds = [
+        {
+            "id": 1,
+            "name": "COC 7th",
+            "type": "mystery",
+            "description": "调查、悬疑与不可名状，适合推理和氛围感团本。",
+            "opening_prompt": "Open a concise COC investigation scene with mystery and tension.",
+            "rule_style": "lite_coc",
+        },
+        {
+            "id": 2,
+            "name": "龙与地下城 DND",
+            "type": "fantasy",
+            "description": "从城堡、地下城到巨龙阴影，适合长期剧情推进与团队成长。",
+            "opening_prompt": "Open a concise D&D fantasy adventure scene.",
+            "rule_style": "dnd5e",
+        },
+        {
+            "id": 3,
+            "name": "自定义世界观",
+            "type": "custom",
+            "description": "原创规则与世界自由搭建，从设定开始你的跑团。",
+            "opening_prompt": "Open a concise custom-world adventure based on the player's premise.",
+            "rule_style": "custom",
+        },
+    ]
 
     with SessionLocal() as db:
         _ensure_demo_user(db)
 
-        for world_id, name in enumerate(world_names[:2], start=1):
-            if db.get(models.World, world_id) is None:
+        for item in demo_worlds:
+            world = db.get(models.World, item["id"])
+            if world is None:
                 db.add(
                     models.World(
-                        id=world_id,
-                        name=name,
-                        type="mystery",
-                        description=f"{name} demo world",
-                        opening_prompt=f"Open a concise adventure in {name}.",
-                        rule_style="lite_dnd",
+                        id=item["id"],
+                        name=item["name"],
+                        type=item["type"],
+                        description=item["description"],
+                        opening_prompt=item["opening_prompt"],
+                        rule_style=item["rule_style"],
                         difficulty="normal",
                         created_by=1,
                     )
                 )
+            else:
+                world.name = item["name"]
+                world.type = item["type"]
+                world.description = item["description"]
+                world.opening_prompt = item["opening_prompt"]
+                world.rule_style = item["rule_style"]
+                world.difficulty = "normal"
+                world.created_by = world.created_by or 1
+                world.is_enabled = 1
 
         if db.get(models.Character, 1) is None:
             db.add(
