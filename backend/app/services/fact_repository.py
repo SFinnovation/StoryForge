@@ -7,7 +7,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.game import Fact, NpcProfile
+from backend.app.models.models import Fact, NpcProfile
 
 
 def _now() -> str:

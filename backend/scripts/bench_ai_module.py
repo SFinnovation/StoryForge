@@ -8,11 +8,11 @@ import sys
 import time
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.ai import get_ai_module
-from app.ai.schemas import (
+from backend.app.ai import get_ai_module
+from backend.app.ai.schemas import (
     ActionParseInput,
     CharacterCard,
     CheckResult,
@@ -20,9 +20,9 @@ from app.ai.schemas import (
     OpeningInput,
     SummaryInput,
 )
-from app.schemas.action_schema import ActionRequest
-from app.services.action_service import handle_action
-from app.db.session import SessionLocal
+from backend.app.schemas.action_schema import ActionRequest
+from backend.app.services.action_service import handle_action
+from backend.app.db.database import SessionLocal
 
 
 def percentile(values: list[float], p: float) -> float:

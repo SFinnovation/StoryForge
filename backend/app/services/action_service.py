@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
-from app.ai.schemas import ActionParseInput, CheckResult, NarrativeInput
-from app.models.game import AiReview, Character, CharacterAttributes, Fact, GameSession
-from app.schemas.session_schema import (
+from backend.app.ai.schemas import ActionParseInput, CheckResult, NarrativeInput
+from backend.app.core.exceptions import StoryForgeError
+from backend.app.models.models import AiReview, Character, Fact, GameSession
+from backend.app.schemas.session_schema import (
     ActionData,
     ActionMetaDTO,
     AiReviewDTO,
@@ -15,12 +18,12 @@ from app.schemas.session_schema import (
     SessionMetaDTO,
     StoryDTO,
 )
-from app.services.ai_service import get_ai_service
-from app.services.clue_pressure import calculate as calc_clue_pressure
-from app.services.context_builder import build_for_action
-from app.services.rule_service import roll_check
-from app.services.session_service import get_playing_session
-from app.services.state_committer import commit_action
+from backend.app.services.ai_service import get_ai_service
+from backend.app.services.clue_pressure import calculate as calc_clue_pressure
+from backend.app.services.context_builder import build_for_action
+from backend.app.services.rule_service import roll_check
+from backend.app.services.session_service import get_playing_session
+from backend.app.services.state_committer import commit_action
 
 
 async def handle_action(
@@ -31,13 +34,7 @@ async def handle_action(
 ) -> ActionData:
     session = get_playing_session(db, session_id, user_id)
     character = db.get(Character, session.character_id)
-    attrs = (
-        db.query(CharacterAttributes)
-        .filter(CharacterAttributes.character_id == character.id)
-        .first()
-        if character
-        else None
-    )
+    attrs = character
 
     ctx = build_for_action(db, session)
     ai = get_ai_service()
@@ -120,7 +117,7 @@ async def handle_action(
             attribute_used=c.attribute_used,
             dc=c.dc,
             dice_roll=c.dice_roll,
-            ability_modifier=c.attribute_bonus,
+            ability_modifier=c.ability_modifier,
             skill_bonus=c.skill_bonus,
             final_value=c.final_value,
             is_success=bool(c.is_success),
@@ -219,12 +216,7 @@ def list_ai_reviews(db: Session, session_id: int, user_id: int, limit: int = 10)
             "approved": bool(r.approved),
             "overall_score": r.overall_score,
             "scores": {
-                "rule_consistency": r.rule_score,
-                "world_consistency": r.world_score,
-                "context_continuity": r.context_score,
-                "character_alignment": r.character_score,
-                "npc_knowledge_boundary": r.npc_boundary_score,
-                "clue_progression": r.clue_score,
+                **json.loads(r.scores_json or "{}"),
             },
             "revision_count": r.revision_count,
             "created_at": r.created_at,

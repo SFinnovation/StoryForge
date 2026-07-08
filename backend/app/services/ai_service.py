@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.ai import get_ai_module
-from app.ai.schemas import (
+from backend.app.ai import get_ai_module
+from backend.app.ai.schemas import (
     ActionParseInput,
     ActionParseOutput,
     AgentResult,

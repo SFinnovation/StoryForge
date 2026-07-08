@@ -1,8 +1,8 @@
-from app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
-from app.ai.schemas.agent_result import AgentResult
-from app.ai.schemas.character import CharacterCard, WorldContext
-from app.ai.schemas.critic import CriticOutput, CriticScores
-from app.ai.schemas.narrative import (
+from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
+from backend.app.ai.schemas.agent_result import AgentResult
+from backend.app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.critic import CriticOutput, CriticScores
+from backend.app.ai.schemas.narrative import (
     CheckResult,
     NarrativeInput,
     NarrativeOutput,
@@ -10,8 +10,8 @@ from app.ai.schemas.narrative import (
     NewClue,
     StateUpdates,
 )
-from app.ai.schemas.opening import OpeningInput, OpeningOutput
-from app.ai.schemas.summary import SummaryInput, SummaryOutput
+from backend.app.ai.schemas.opening import OpeningInput, OpeningOutput
+from backend.app.ai.schemas.summary import SummaryInput, SummaryOutput
 
 __all__ = [
     "ActionParseInput",

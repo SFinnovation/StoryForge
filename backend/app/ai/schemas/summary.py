@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
-from app.ai.schemas.character import CharacterCard, WorldContext
-from app.ai.schemas.narrative import CheckResult
+from backend.app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.narrative import CheckResult
 
 
 class SummaryInput(BaseModel):

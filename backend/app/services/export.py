@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models.story import Story
+from backend.app.models.story import Story
 
 
 class ExportService:

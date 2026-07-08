@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.character import CharacterCard, WorldContext
 
 
 class OpeningNpc(BaseModel):

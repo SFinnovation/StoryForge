@@ -3,9 +3,9 @@ StoryForge AI 模块 — 双 Agent 架构
 
 后端调用示例::
 
-    from app.ai import get_ai_module
-    from app.ai.schemas import OpeningInput, ActionParseInput, NarrativeInput, SummaryInput
-    from app.ai.schemas import CharacterCard, CheckResult
+    from backend.app.ai import get_ai_module
+    from backend.app.ai.schemas import OpeningInput, ActionParseInput, NarrativeInput, SummaryInput
+    from backend.app.ai.schemas import CharacterCard, CheckResult
 
     ai = get_ai_module()
 
@@ -38,6 +38,6 @@ StoryForge AI 模块 — 双 Agent 架构
     )
 """
 
-from app.ai.orchestrator import AIModule, get_ai_module
+from backend.app.ai.orchestrator import AIModule, get_ai_module
 
 __all__ = ["AIModule", "get_ai_module"]

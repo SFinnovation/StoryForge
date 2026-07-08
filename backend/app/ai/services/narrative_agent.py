@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.ai.schemas.character import WorldContext
-from app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
-from app.ai.services.fallbacks import mock_narrative
-from app.ai.services.json_utils import dumps_context, parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.ai.schemas.character import WorldContext
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
+from backend.app.ai.services.fallbacks import mock_narrative
+from backend.app.ai.services.json_utils import dumps_context, parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
 
 
 class NarrativeAgent:
