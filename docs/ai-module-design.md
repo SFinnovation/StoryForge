@@ -1,9 +1,13 @@
 # StoryForge AI 模块设计规格书
 
-> **版本**：v1.0 · **更新**：2026-07-07  
+> **版本**：v1.0 · **更新**：2026-07-08  
 > **负责人**：AI 模块  
 > **读者**：AI / 后端 / 数据库 / 前端  
-> **关联文档**：[implementation-spec.md](implementation-spec.md) · [dnd5e-integration.md](dnd5e-integration.md)
+> **关联文档**：[implementation-spec.md](implementation-spec.md) · [dnd5e-integration.md](dnd5e-integration.md)  
+> **实现说明**：[ai-module-implementation.md](ai-module-implementation.md)（✅ MVP 已实现）
+
+> 📌 **实现状态**：五个 Agent、RevisionLoop、Context Builder、State Committer、DB 持久化均已落地。  
+> 代码入口：`backend/app/ai/` · 编排层：`backend/app/services/` · 验证：`backend/scripts/verify_*.py`
 
 ---
 
@@ -395,10 +399,10 @@ Narrative Agent 生成
 
 ---
 
-## 9. 后端内部接口（预留）
+## 9. 后端内部接口（已实现）
 
-> **约定**：以下接口由 `backend/app/ai/` 实现，供 `session_service` / `action_service` 调用。  
-> **命名空间**：Python 模块路径，非 HTTP。
+> **实现对照**见 [ai-module-implementation.md §5–§6](ai-module-implementation.md#5-后端集成层)。  
+> **约定**：以下接口由 `backend/app/ai/` 与 `backend/app/services/` 实现，供 `session_service` / `action_service` 调用。
 
 ### 9.1 接口一览
 
@@ -808,4 +812,5 @@ AI_FALLBACK_ON_CRITIC_FAIL=true     # 审核仍失败时用保底叙事
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| v1.1 | 2026-07-08 | 标注 MVP 已实现，关联实现说明文档 |
 | v1.0 | 2026-07-07 | 双 Agent 架构、Fact 分层、接口预留 |

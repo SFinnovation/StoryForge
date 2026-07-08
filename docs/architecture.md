@@ -64,10 +64,16 @@ StoryForge 灵境档案采用 **前后端分离** 架构，核心创新在于将
 - `rules/dnd5e/`：从 Foundry dnd5e 包提取的 SRD JSON
 - `rule_service` 加载并校验角色创建与检定
 
-### 7. AI 编排（AI Service）
+### 7. AI 编排（AI Service）— ✅ 已实现
 
-- 双 Agent：Narrative + Critic + Revision Loop
-- 详见 [ai-module-design.md](ai-module-design.md)
+双 Agent 架构：**Opening → ActionParser → RuleEngine → Narrative → Critic → RevisionLoop → StateCommitter → Summary**
+
+| 文档 | 说明 |
+|------|------|
+| [ai-module-design.md](ai-module-design.md) | 架构设计、Fact 分层、接口规格 |
+| [ai-module-implementation.md](ai-module-implementation.md) | **实现说明**：代码结构、DB 交互、API、测试 |
+
+代码：`backend/app/ai/`（Agent）· `backend/app/services/`（编排）· `backend/scripts/verify_*.py`（验证）
 
 ### 8. 报告与可视化（Report + Admin）
 
@@ -108,5 +114,6 @@ Session ── Report
 
 | 日期 | 说明 |
 |------|------|
+| 2026-07-08 | AI 模块 MVP 实现，补充实现说明文档链接 |
 | 2026-07-07 | 对齐灵境档案跑团方向，替换原故事创作骨架 |
 | 2026-07-07 | 初始文档骨架 |

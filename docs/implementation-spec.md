@@ -804,6 +804,7 @@ NarrativeAgent   CriticAgent   RevisionLoop   StateCommitter   DB
 ## 9. AI 模块规范
 
 > **完整设计**见 **[ai-module-design.md](ai-module-design.md)**（双 Agent、Fact 分层、clue_pressure、全量接口）。  
+> **实现说明**见 **[ai-module-implementation.md](ai-module-implementation.md)**（五 Agent 代码、DB 交互、API 对接、测试）。  
 > Prompt：`backend/app/ai/prompts/` · DDL：`数据库存储结构设计.sql` §11
 
 ### 9.1 架构概要
