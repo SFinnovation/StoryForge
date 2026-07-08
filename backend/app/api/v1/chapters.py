@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.schemas.chapter import ChapterCreate, ChapterResponse, ChapterUpdate
-from app.services.chapter import chapter_service
+from backend.app.api.deps import get_db_session
+from backend.app.schemas.chapter import ChapterCreate, ChapterResponse, ChapterUpdate
+from backend.app.services.chapter import chapter_service
 
 router = APIRouter(prefix="/chapters", tags=["chapters"])
 

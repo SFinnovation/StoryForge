@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.services.export import export_service
-from app.services.story import story_service
+from backend.app.api.deps import get_db_session
+from backend.app.services.export import export_service
+from backend.app.services.story import story_service
 
 router = APIRouter(prefix="/export", tags=["export"])
 

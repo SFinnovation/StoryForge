@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id, get_db_session
-from app.core.exceptions import StoryForgeError
-from app.schemas.action_schema import ActionRequest
-from app.schemas.api_response import success
-from app.schemas.session_schema import SessionStartRequest
-from app.services import action_service, report_service, session_service
+from backend.app.api.deps import get_current_user_id, get_db_session
+from backend.app.core.exceptions import StoryForgeError
+from backend.app.schemas.action_schema import ActionRequest
+from backend.app.schemas.api_response import success
+from backend.app.schemas.session_schema import SessionStartRequest
+from backend.app.services import action_service, report_service, session_service
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -26,7 +26,7 @@ def list_sessions(
     db: Session = Depends(get_db_session),
     user_id: int = Depends(get_current_user_id),
 ):
-    from app.models.game import GameSession
+    from backend.app.models.models import GameSession
 
     rows = db.query(GameSession).filter(GameSession.user_id == user_id).order_by(GameSession.id.desc()).all()
     return success(
@@ -41,6 +41,15 @@ def list_sessions(
             for s in rows
         ]
     )
+
+
+@router.get("/{session_id}")
+def get_session_detail(
+    session_id: int,
+    db: Session = Depends(get_db_session),
+    user_id: int = Depends(get_current_user_id),
+):
+    return success(session_service.get_session_detail(db, session_id, user_id))
 
 
 @router.get("/{session_id}/messages")

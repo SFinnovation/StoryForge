@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
-from app.ai.schemas.agent_result import AgentResult
-from app.ai.schemas.character import CharacterCard, WorldContext
-from app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
-from app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
-from app.ai.schemas.narrative import NarrativeInput, NarrativeWithReviewResult
-from app.ai.schemas.opening import OpeningInput, OpeningOutput
-from app.ai.schemas.summary import SummaryInput, SummaryOutput
-from app.ai.services.action_parser_agent import ActionParserAgent
-from app.ai.services.module_extractor_agent import ModuleExtractorAgent
-from app.ai.services.opening_agent import OpeningAgent
-from app.ai.services.revision_loop import RevisionLoop
-from app.ai.services.rulebook_extractor_agent import RulebookExtractorAgent
-from app.ai.services.summary_agent import SummaryAgent
+from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
+from backend.app.ai.schemas.agent_result import AgentResult
+from backend.app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeWithReviewResult
+from backend.app.ai.schemas.opening import OpeningInput, OpeningOutput
+from backend.app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
+from backend.app.ai.schemas.summary import SummaryInput, SummaryOutput
+from backend.app.ai.services.action_parser_agent import ActionParserAgent
+from backend.app.ai.services.module_extractor_agent import ModuleExtractorAgent
+from backend.app.ai.services.opening_agent import OpeningAgent
+from backend.app.ai.services.revision_loop import RevisionLoop
+from backend.app.ai.services.rulebook_extractor_agent import RulebookExtractorAgent
+from backend.app.ai.services.summary_agent import SummaryAgent
 
 
 class AIModule:

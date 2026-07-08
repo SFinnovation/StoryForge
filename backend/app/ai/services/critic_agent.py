@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from app.ai.schemas.critic import CriticOutput
-from app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
-from app.ai.services.fallbacks import mock_critic_approve
-from app.ai.services.json_utils import dumps_context, parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
-from app.core.config import settings
+from backend.app.ai.schemas.critic import CriticOutput
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
+from backend.app.ai.services.fallbacks import mock_critic_approve
+from backend.app.ai.services.json_utils import dumps_context, parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.core.config import settings
 
 
 class CriticAgent:

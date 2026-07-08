@@ -7,7 +7,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.models.game import Character, CharacterAttributes
+from backend.app.models.models import Character
 
 RULES_DIR = Path(__file__).resolve().parents[3] / "rules" / "dnd5e"
 
@@ -59,6 +59,25 @@ def _load_skills() -> dict:
         return json.load(f)
 
 
+def load_rule_file(name: str) -> dict:
+    allowed = {"core", "abilities", "skills", "classes", "races", "backgrounds"}
+    if name not in allowed:
+        raise ValueError(f"unsupported rule file: {name}")
+    with open(RULES_DIR / f"{name}.json", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def dnd5e_summary() -> dict:
+    return {
+        "core": load_rule_file("core"),
+        "abilities": load_rule_file("abilities"),
+        "skills": load_rule_file("skills")["skills"],
+        "races": load_rule_file("races").get("races", []),
+        "classes": load_rule_file("classes").get("classes", []),
+        "backgrounds": load_rule_file("backgrounds").get("backgrounds", []),
+    }
+
+
 _SKILLS_DATA = _load_skills()
 SKILLS = _SKILLS_DATA["skills"]
 
@@ -78,18 +97,33 @@ def resolve_attribute_for_skill(skill_key: str | None, fallback_attribute: str) 
     return fallback_attribute
 
 
-def get_attribute_bonus(attrs: CharacterAttributes | None, attribute: str) -> int:
+def get_attribute_bonus(attrs: object | None, attribute: str) -> int:
     if attrs is None:
         return 0
-    return int(getattr(attrs, attribute, 0))
+    score = int(getattr(attrs, attribute, 10))
+    return ability_modifier(score)
 
 
 def skill_bonus(character: Character, skill_key: str | None) -> int:
     if not skill_key:
         return 0
-    prof_skills = PROFESSION_SKILLS.get(character.profession, set())
-    if skill_key in prof_skills:
-        return PROFICIENCY_BONUS
+    try:
+        skills = json.loads(character.skills_json or "{}")
+    except json.JSONDecodeError:
+        skills = {}
+
+    skill = skills.get(skill_key)
+    if isinstance(skill, dict):
+        if skill.get("expertise"):
+            return int(getattr(character, "proficiency_bonus", PROFICIENCY_BONUS)) * 2
+        if skill.get("proficient"):
+            return int(getattr(character, "proficiency_bonus", PROFICIENCY_BONUS))
+    if skill is True:
+        return int(getattr(character, "proficiency_bonus", PROFICIENCY_BONUS))
+
+    profession = getattr(character, "profession", None) or getattr(character, "class_id", "")
+    if skill_key in PROFESSION_SKILLS.get(profession, set()):
+        return int(getattr(character, "proficiency_bonus", PROFICIENCY_BONUS))
     return 0
 
 
@@ -115,7 +149,7 @@ def format_result_text(
 
 def roll_check(
     character: Character,
-    attrs: CharacterAttributes | None,
+    attrs: object | None,
     *,
     check_type: str,
     skill_key: str | None,

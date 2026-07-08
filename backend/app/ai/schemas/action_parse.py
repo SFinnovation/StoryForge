@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from app.ai.schemas.character import CharacterCard
+from backend.app.ai.schemas.character import CharacterCard
 
 
 class ActionParseInput(BaseModel):

@@ -7,19 +7,31 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_storyforge_api.db")
 
 from httpx import ASGITransport, AsyncClient
 
-from app.db.init_db import reset_demo_db
-from app.main import app
+from backend.app.db.database import SessionLocal
+from backend.app.db.init_db import reset_demo_db
+from backend.app.main import app
+from backend.app.models.models import GameSession
+
+
+def finish_seed_sessions() -> None:
+    """reset_demo_db 会创建演示 playing 会话；接口测试需要新开一局。"""
+    with SessionLocal() as db:
+        rows = db.query(GameSession).filter(GameSession.status == "playing").all()
+        for row in rows:
+            row.status = "finished"
+        db.commit()
 
 
 async def main() -> None:
     reset_demo_db()
+    finish_seed_sessions()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         start = await client.post(

@@ -7,15 +7,15 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_content_extract.db")
 
 from httpx import ASGITransport, AsyncClient
 
-from app.db.init_db import reset_demo_db
-from app.main import app
+from backend.app.db.init_db import reset_demo_db
+from backend.app.main import app
 
 PHB = Path(r"C:\Users\congw\Downloads\5eDnD_玩家手册PHB_中译v1.6版_可复制文本.docx")
 KRENKO = Path(r"C:\Users\congw\Downloads\追捕克仑可_Krenkos_Way_可复制文本 (1).docx")

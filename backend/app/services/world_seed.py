@@ -1,154 +1,153 @@
-"""开局模组数据落库 — 从 AdventureModule 提取结果 seed 到 session。"""
+# -*- coding: utf-8 -*-
+"""World Seed (implementation §2.1 / §6.2)
 
-from __future__ import annotations
+开局时把模组静态数据灌入会话:
+  facts        <- world_public / hidden_truth / npc_private (allow_protected 通道)
+  npc_profiles <- NPC 人格与知识边界
 
-import json
-from datetime import datetime
-
+数据来源优先级:
+  1. worlds.adventure_module_id 关联的 AdventureModule 提取包（docx 导入）
+  2. MODULE_DATA 内置模组（按 worlds.name 匹配）
+未收录的世界观(如自定义)不 seed, 不报错。
+幂等: 以"该会话已有 world_public"为已 seed 标志跳过。
+"""
 from sqlalchemy.orm import Session
 
-from app.ai.schemas.module_extract import ModuleExtractionOutput
-from app.ai.schemas.opening import OpeningOutput
-from app.models.game import Fact, NpcProfile, World
-from app.services.content_ingestion_service import load_world_content_context
-from app.services.fact_repository import create_fact
+from backend.app.models.models import World
+from backend.app.repositories import FactRepo, NpcRepo, SessionRepo
+
+# ---------------- 模组数据 ----------------
+
+MODULE_DATA: dict[str, dict] = {
+    "古堡悬疑": {
+        "facts": [
+            dict(content="古堡主人在午夜钟声敲响时失踪, 全堡停电十分钟。",
+                 fact_type="world_public", importance="important"),
+            dict(content="失踪学者生前在研究古堡地下室的一份手稿。",
+                 fact_type="world_public"),
+            dict(content="地下室入口位于东侧走廊尽头的画像后。",
+                 fact_type="hidden_truth", importance="key",
+                 status="locked", related_scene="east_corridor"),
+            dict(content="老管家昨晚看见学者独自进入东侧走廊。",
+                 fact_type="npc_private", related_scene="main_hall"),
+        ],
+        "npcs": [
+            dict(npc_id="butler_001", name="老管家",
+                 personality="谨慎、回避、忠诚于古堡主人",
+                 knowledge_scope=["古堡日常", "地下室钥匙", "学者昨晚进东侧走廊"],
+                 forbidden_knowledge=["最终 Boss 身份", "密室机关完整解法"],
+                 speaking_style="礼貌、含糊、敬语", related_scene="main_hall"),
+        ],
+    },
+    "追捕克仑可 Krenko's Way": {
+        "facts": [
+            dict(content="十会盟悬赏活捉越狱的鬼怪黑帮头目克仑可, 期限三天。",
+                 fact_type="world_public", importance="key"),
+            dict(content="骚帮兄弟会同样在全城搜捕克仑可, 为复仇也为地盘。",
+                 fact_type="world_public"),
+            dict(content="克仑可藏身于锻炉街运河码头的旧仓库。",
+                 fact_type="hidden_truth", importance="key",
+                 status="locked", related_scene="forge_street"),
+            dict(content="纳休斯·文实为幕后雇主办事, 并非单纯执法。",
+                 fact_type="hidden_truth", importance="key", status="locked"),
+            dict(content="军火商法莉什将于日落在烟房旅馆外向克仑可交货。",
+                 fact_type="npc_private", related_scene="tin_street"),
+        ],
+        "npcs": [
+            dict(npc_id="lavinia_001", name="纳休斯·文",
+                 personality="维多肯, 说话拘谨, 回避审问相关问题",
+                 knowledge_scope=["委托内容", "报酬 10+100 奇诺", "移交地点瑟雷尼亚旧粮仓"],
+                 forbidden_knowledge=["幕后雇主身份"],
+                 speaking_style="正式、官腔", related_scene="锯齿监狱·会见纳休斯"),
+            dict(npc_id="falish_001", name="法莉什",
+                 personality="精明的军火商, 只认钱",
+                 knowledge_scope=["武器交易", "克仑可的订单"],
+                 forbidden_knowledge=["克仑可确切藏身处"],
+                 speaking_style="市侩、警惕", related_scene="tin_street"),
+        ],
+    },
+}
 
 
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _module_from_pack(db: Session, world: World | None) -> dict | None:
+    """从 AdventureModule 提取包构造与 MODULE_DATA 同构的模组数据。"""
+    if world is None or not getattr(world, "adventure_module_id", None):
+        return None
+    from backend.app.services.content_pack_repository import get_adventure_module
+
+    module = get_adventure_module(db, world.adventure_module_id)
+    if module is None:
+        return None
+
+    scene = module.current_scene or None
+    facts: list[dict] = []
+    for content in module.public_world_facts + module.world_facts:
+        facts.append(dict(content=content, fact_type="world_public", related_scene=scene))
+    for content in module.hidden_truths:
+        facts.append(dict(content=content, fact_type="hidden_truth",
+                          importance="key", status="locked", related_scene=scene))
+    for content in module.player_known_clues:
+        facts.append(dict(content=content, fact_type="player_known", related_scene=scene))
+    for nf in module.npc_private_facts:
+        facts.append(dict(content=nf.content, fact_type="npc_private",
+                          importance=nf.importance,
+                          related_scene=nf.related_scene or scene))
+
+    npcs: list[dict] = []
+    for npc in module.visible_npcs:
+        npcs.append(dict(
+            npc_id=npc.npc_id,
+            name=npc.name,
+            personality=npc.personality or npc.description,
+            knowledge_scope=npc.knowledge_scope,
+            forbidden_knowledge=npc.forbidden_knowledge,
+            speaking_style=npc.speaking_style,
+            related_scene=npc.current_scene or scene,
+        ))
+    seen = {n["npc_id"] for n in npcs}
+    for npc in module.seed_npcs:
+        npc_id = npc.npc_id or f"npc_{npc.name}"
+        if npc_id in seen:
+            continue
+        npcs.append(dict(npc_id=npc_id, name=npc.name,
+                         personality=npc.description, related_scene=scene))
+
+    return {"facts": facts, "npcs": npcs}
 
 
 def seed_session_world_data(
     db: Session,
     session_id: int,
-    world: World,
-    opening: OpeningOutput,
-) -> None:
-    """开局后将模组/规则书提取内容写入 session 级 facts 与 npc_profiles。"""
-    if db.query(Fact).filter(Fact.session_id == session_id).count() > 0:
-        return
+    world: World | None = None,
+    opening=None,
+) -> dict:
+    """开局调用: 依据会话所属世界观灌入模组 facts + npc_profiles。
 
-    pack_ctx = load_world_content_context(db, world)
-    module: ModuleExtractionOutput | None = pack_ctx["module"]
+    返回 {"facts": n, "npcs": n, "skipped": bool}
+    """
+    session = SessionRepo(db).get(session_id)
+    if session is None:
+        raise ValueError(f"session {session_id} 不存在")
+    world = db.get(World, session.world_id)
 
-    if module:
-        _seed_from_module(db, session_id, module, opening.scene_title)
-        return
+    # 优先使用 docx 导入的 AdventureModule 提取包
+    module = _module_from_pack(db, world)
+    if module is None:
+        module = MODULE_DATA.get(world.name if world else "")
+    if module is None:
+        return {"facts": 0, "npcs": 0, "skipped": True}
 
-    create_fact(
-        db,
-        session_id,
-        content=world.description,
-        fact_type="world_public",
-        related_scene=opening.scene_title,
-    )
-    if world.type == "mystery":
-        create_fact(
-            db,
-            session_id,
-            content="钟摆停止是因为有人动过机关，钟摆背后存在暗格。",
-            fact_type="hidden_truth",
-            related_scene=opening.scene_title,
-            importance="key",
-            status="locked",
-            visibility_json={"player": False, "dm": True},
-        )
+    facts = FactRepo(db)
+    if facts.list_by_session(session_id, fact_types=["world_public"]):
+        return {"facts": 0, "npcs": 0, "skipped": True}  # 已 seed, 幂等跳过
 
-
-def _seed_from_module(
-    db: Session,
-    session_id: int,
-    module: ModuleExtractionOutput,
-    scene: str,
-) -> None:
-    for fact in module.public_world_facts:
-        create_fact(
-            db,
-            session_id,
-            content=fact,
-            fact_type="world_public",
-            related_scene=scene,
-        )
-    for fact in module.world_facts:
-        create_fact(
-            db,
-            session_id,
-            content=fact,
-            fact_type="world_public",
-            related_scene=scene,
-        )
-    for truth in module.hidden_truths:
-        create_fact(
-            db,
-            session_id,
-            content=truth,
-            fact_type="hidden_truth",
-            related_scene=scene,
-            importance="key",
-            status="locked",
-            visibility_json={"player": False, "dm": True},
-        )
-    for clue in module.player_known_clues:
-        create_fact(
-            db,
-            session_id,
-            content=clue,
-            fact_type="player_known",
-            related_scene=scene,
-        )
-    for nf in module.npc_private_facts:
-        create_fact(
-            db,
-            session_id,
-            content=nf.content,
-            fact_type="npc_private",
-            related_scene=nf.related_scene or scene,
-            importance=nf.importance,
-            visibility_json={"player": False, "npcs": [nf.npc_id] if nf.npc_id else []},
-        )
-
-    for npc in module.visible_npcs:
-        exists = (
-            db.query(NpcProfile)
-            .filter(NpcProfile.session_id == session_id, NpcProfile.npc_id == npc.npc_id)
-            .first()
-        )
-        if exists:
-            continue
-        db.add(
-            NpcProfile(
-                session_id=session_id,
-                npc_id=npc.npc_id,
-                name=npc.name,
-                personality=npc.personality or npc.description,
-                knowledge_scope_json=json.dumps(npc.knowledge_scope, ensure_ascii=False),
-                forbidden_json=json.dumps(npc.forbidden_knowledge, ensure_ascii=False),
-                speaking_style=npc.speaking_style,
-                alertness=0,
-                current_scene=npc.current_scene or scene,
-                created_at=_now(),
-            )
-        )
-
-    for npc in module.seed_npcs:
-        npc_id = npc.npc_id or f"npc_{npc.name}"
-        exists = (
-            db.query(NpcProfile)
-            .filter(NpcProfile.session_id == session_id, NpcProfile.npc_id == npc_id)
-            .first()
-        )
-        if exists:
-            continue
-        db.add(
-            NpcProfile(
-                session_id=session_id,
-                npc_id=npc_id,
-                name=npc.name,
-                personality=npc.description,
-                knowledge_scope_json="[]",
-                forbidden_json="[]",
-                alertness=0,
-                current_scene=scene,
-                created_at=_now(),
-            )
-        )
+    n_facts = 0
+    for f in module["facts"]:
+        facts.create(session_id, f["content"], f["fact_type"],
+                     related_scene=f.get("related_scene"),
+                     importance=f.get("importance", "normal"),
+                     status=f.get("status", "active"),
+                     allow_protected=True)   # 唯一允许创建 hidden/npc_private 的通道
+        n_facts += 1
+    npcs = NpcRepo(db).create_batch(session_id, module["npcs"])
+    return {"facts": n_facts, "npcs": len(npcs), "skipped": False}

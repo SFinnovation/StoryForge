@@ -7,9 +7,9 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.ai.schemas.module_extract import ModuleExtractionOutput
-from app.ai.schemas.rulebook_extract import RulebookExtractionOutput
-from app.models.game import AdventureModule, RulebookPack, World
+from backend.app.ai.schemas.module_extract import ModuleExtractionOutput
+from backend.app.ai.schemas.rulebook_extract import RulebookExtractionOutput
+from backend.app.models.models import AdventureModule, RulebookPack, World
 
 
 def _now() -> str:
@@ -105,7 +105,7 @@ def get_rulebook_pack(db: Session, pack_id: int) -> RulebookExtractionOutput | N
     pack = db.get(RulebookPack, pack_id)
     if pack is None:
         return None
-    from app.ai.schemas.rulebook_extract import WorldFactItem
+    from backend.app.ai.schemas.rulebook_extract import WorldFactItem
 
     facts = [WorldFactItem.model_validate(f) for f in json.loads(pack.public_world_facts_json or "[]")]
     return RulebookExtractionOutput(
@@ -122,8 +122,8 @@ def get_adventure_module(db: Session, module_id: int) -> ModuleExtractionOutput 
     row = db.get(AdventureModule, module_id)
     if row is None:
         return None
-    from app.ai.schemas.module_extract import ModuleFactItem, ModuleNpcSeed, ModuleScene
-    from app.ai.schemas.opening import OpeningNpc
+    from backend.app.ai.schemas.module_extract import ModuleFactItem, ModuleNpcSeed, ModuleScene
+    from backend.app.ai.schemas.opening import OpeningNpc
 
     return ModuleExtractionOutput(
         title=row.title,

@@ -1,52 +1,117 @@
-# 后端开发进度与接口契约 (StoryForge)
+# 后端开发进度与接口契约
 
-> 本文档由后端负责人在第一阶段开发完成后编写，用于同步当前的 API 进度、占位符情况以及对 AI 模块和数据库模块的依赖要求。
+> 本文档同步当前后端真实状态。完整目标规格见 [docs/implementation-spec.md](docs/implementation-spec.md)，逐模块检查见 [docs/module-audit.md](docs/module-audit.md)。
 
-## 🚀 一、 目前已完成的工作
+## 当前结论
 
-后端“调度中心”的基础设施已搭建完毕，核心流程已跑通：
+后端已经从第一阶段 mock 调度中心，推进到可运行的 MVP 主闭环：
 
-1. **FastAPI 工程脚手架搭建**
-   - 完成了 `backend/` 目录树的建立（包含 `api`, `core`, `db`, `models`, `schemas`, `services` 等标准目录）。
-   - 配置了基础的 `main.py` 路由入口和 `requirements.txt` 依赖清单。
-   - 启用了本地热更新服务和 Swagger UI 接口文档。
+```text
+POST /sessions/start
+  -> OpeningAgent
+  -> messages/tasks/clues/facts/npc_profiles
 
-2. **核心跑团规则引擎 (`dice_service.py`)**
-   - 实现了基于 DND 规则的 d20 掷骰判定函数 `roll_action_check`。
-   - 逻辑包含：`掷骰结果(1-20) + 属性修正 + 技能加值 >= 难度 DC` 的成败判定。
-   - 已通过独立脚本完成极端数值的本地测试。
+POST /sessions/{id}/action
+  -> ActionParserAgent
+  -> rule_service 后端 d20 判定
+  -> NarrativeAgent
+  -> CriticAgent + RevisionLoop
+  -> messages/action_checks/clues/tasks/facts/ai_reviews
 
-3. **核心动作调度 API (`actions.py` & `action_schema.py`)**
-   - 定义了前端请求体（接收 `action_text`）和响应体（返回判定结果和剧情文本）的 Pydantic 模型。
-   - 编写了 `POST /sessions/{session_id}/action` 核心路由。
-   - 已在本地利用 Mock 数据，成功打通“接收前端请求 -> 获取角色属性 -> AI 判定行动 -> D20 掷骰 -> AI 生成剧情 -> 返回前端”的完整 HTTP 数据流。
+POST /sessions/{id}/report/generate
+  -> SummaryAgent
+  -> reports
+```
 
----
+## 已实现
 
-## 🚧 二、 当前代码中的占位符 (Mock)
+### 1. FastAPI 工程骨架
 
-为了不阻塞前端联调，当前 API 接口中使用了假数据（Mock）进行占位。以下部分将在真实服务接入后被替换：
+- 入口：`backend/app/main.py`
+- 路由聚合：`backend/app/api/v1/router.py`
+- 配置：`backend/app/core/config.py`
+- 统一业务异常：`StoryForgeError`
+- 健康检查：`GET /health`
 
-- **角色状态占位**：目前没有查数据库，代码里强制写死了敏捷属性修正为 `+3`。
-- **AI 行动判定占位**：目前没有调用大模型，代码里强制把用户的任何行为都识别为 `潜行`，并固定返回难度 `DC = 15`，使用属性为 `dexterity`。
-- **AI 剧情生成占位**：目前没有真实大模型生成，根据掷骰子的成败，后端只会返回一段写死的简短拼接字符串（如“[系统提示] 判定成功/失败...”）。
+### 2. 数据库与 ORM
 
----
+- 运行时 ORM：`backend/app/models/models.py`
+- DDL：`backend/app/db/schema.sql`
+- 初始化：`backend/app/db/init_db.py`
+- 表结构：`users`、`worlds`、`characters`、`game_sessions`、`messages`、`action_checks`、`clues`、`tasks`、`reports`、`facts`、`npc_profiles`、`ai_reviews`
 
-## 🤝 三、 需要等待交付才能推进的事项
+### 3. 认证、规则与跑团主闭环
 
-为了实现整个跑团系统的真正闭环，需要以下两方模块交付后，后端才能把上述占位符替换为真实逻辑：
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/rules/dnd5e/summary`
+- `GET /api/v1/rules/dnd5e/skills`
 
-### 1. 依赖数据库同学 (Database) 交付：
-- **ORM 模型与连接**：请在 `models/` 和 `db/` 目录下交付建好真实关系的 SQLAlchemy 模型，以及 `get_db` 依赖函数。
-- **核心查询方法**：后端亟需一个类似于 `get_character_attributes(db, character_id)` 的方法，只要能让我传一个角色 ID，就能查到该角色各项属性（如力量、敏捷）的真实数值即可。
-- **日志保存方法**：提供能把一回合的玩家行动、掷骰结果、AI 剧情文本入库保存的方法。
+- `POST /api/v1/sessions/start`
+- `GET /api/v1/sessions/{session_id}`
+- `POST /api/v1/sessions/{session_id}/action`
+- `POST /api/v1/sessions/{session_id}/end`
+- `POST /api/v1/sessions/{session_id}/report/generate`
+- `GET /api/v1/sessions/{session_id}/messages`
+- `GET /api/v1/sessions/{session_id}/meta`
+- `GET /api/v1/sessions/{session_id}/facts`
+- `GET /api/v1/sessions/{session_id}/ai-reviews`
 
-### 2. 依赖 AI 模块同学交付：
-- **AI 意图识别函数**：需要提供一个函数，接收用户的 `action_text`，调用大模型后，**严格且稳定地返回以下 JSON 结构**给我：
-  ```json
-  {
-    "check_type": "潜行", 
-    "attribute_used": "dexterity", 
-    "dc": 14
-  }
+### 4. 角色与世界观接口
+
+- `GET /api/v1/worlds`
+- `GET /api/v1/worlds/{world_id}`
+- `POST /api/v1/characters/`
+- `GET /api/v1/characters`
+- `GET /api/v1/characters/{character_id}`
+
+角色接口兼容基础字段写入，并支持文档中的 D&D 5e payload：标准数组校验、种族属性加值、职业 HP/豁免、背景/职业技能熟练写入。
+
+### 5. 传统故事创作接口
+
+- `stories`
+- `chapters`
+- `worldbuilding`
+- `export`
+
+这些接口保留为通用故事创作能力。Markdown 导出可用，PDF 导出仍返回 501。
+
+## 当前占位与限制
+
+| 项 | 当前状态 | 下一步 |
+|----|----------|--------|
+| 认证 | MVP bearer token 可用，无 token 保留 demo 回退 | 生产前接标准 JWT/RBAC 与刷新机制 |
+| 角色创建 | D&D 5e MVP 规则链可用 | 补 27 点购、选择型种族加值和复杂技能选择 |
+| CORS | 已挂载 `CORSMiddleware` | 部署时收紧 `CORS_ORIGINS` |
+| 前端联调 | API 已有，前端仍是静态原型 | 增加请求层、状态管理与真实页面数据 |
+| PDF 导出 | `ExportService.export_pdf()` 未实现 | 选型并补 PDF 导出 |
+| 管理端 | 文档列为 P1 | 增加 `/admin` 路由与权限 |
+
+## 验证方式
+
+安装依赖后从仓库根目录运行：
+
+```bash
+python -m backend.scripts.verify_implementation_spec
+python -m backend.scripts.verify_ai_db_interaction
+python -m backend.scripts.test_action_api
+python -m backend.scripts.test_frontend_contract
+python -m backend.scripts.test_ai_module
+python -m backend.scripts.bench_ai_module
+```
+
+无需第三方依赖的基础静态检查：
+
+```bash
+python -m compileall -q backend/app backend/scripts scripts
+python -m json.tool rules/dnd5e/core.json
+python -m json.tool rules/dnd5e/skills.json
+```
+
+## 接口约定
+
+- 前缀：`/api/v1`
+- 成功响应：`{"code": 0, "message": "ok", "data": ...}`
+- 业务错误：通过 `StoryForgeError` 统一映射
+- AI 无 Key：走 mock/fallback 路径，便于本地演示

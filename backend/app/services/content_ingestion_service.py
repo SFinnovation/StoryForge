@@ -1,4 +1,4 @@
-"""内容导入编排 — docx → Agent 提取 → 数据库。"""
+﻿"""内容导入编排 — docx → Agent 提取 → 数据库。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.ai.schemas.agent_result import AgentResult
-from app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
-from app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
-from app.ai.services.docx_extractor import extract_text_from_docx
-from app.services.ai_service import get_ai_service
-from app.services.content_pack_repository import (
+from backend.app.ai.schemas.agent_result import AgentResult
+from backend.app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
+from backend.app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
+from backend.app.ai.services.docx_extractor import extract_text_from_docx
+from backend.app.services.ai_service import get_ai_service
+from backend.app.services.content_pack_repository import (
     get_adventure_module,
     get_rulebook_pack,
     link_module_to_world,

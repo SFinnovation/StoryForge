@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.schemas.api_response import success
-from app.services.content_ingestion_service import ingest_module_from_docx, ingest_rulebook_from_docx
-from app.services.content_pack_repository import get_adventure_module, get_rulebook_pack
+from backend.app.api.deps import get_db_session
+from backend.app.schemas.api_response import success
+from backend.app.services.content_ingestion_service import ingest_module_from_docx, ingest_rulebook_from_docx
+from backend.app.services.content_pack_repository import get_adventure_module, get_rulebook_pack
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -71,7 +71,7 @@ async def extract_module(
 def get_rulebook(pack_id: int, db: Session = Depends(get_db_session)):
     pack = get_rulebook_pack(db, pack_id)
     if pack is None:
-        from app.core.exceptions import StoryForgeError
+        from backend.app.core.exceptions import StoryForgeError
 
         raise StoryForgeError("rulebook pack not found", status_code=404)
     return success(pack.model_dump())
@@ -81,7 +81,7 @@ def get_rulebook(pack_id: int, db: Session = Depends(get_db_session)):
 def get_module(module_id: int, db: Session = Depends(get_db_session)):
     module = get_adventure_module(db, module_id)
     if module is None:
-        from app.core.exceptions import StoryForgeError
+        from backend.app.core.exceptions import StoryForgeError
 
         raise StoryForgeError("adventure module not found", status_code=404)
     return success(module.model_dump())

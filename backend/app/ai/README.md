@@ -6,7 +6,7 @@
 ## 快速入口
 
 ```python
-from app.ai import get_ai_module
+from backend.app.ai import get_ai_module
 
 ai = get_ai_module()
 ```

@@ -1,13 +1,13 @@
-"""RulebookExtractorAgent — 规则书提取、压缩、标准化。"""
+﻿"""RulebookExtractorAgent — 规则书提取、压缩、标准化。"""
 
 from __future__ import annotations
 
-from app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
-from app.ai.services.fallbacks import mock_rulebook_extract
-from app.ai.services.json_utils import dumps_context, parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
-from app.ai.services.text_chunker import chunk_text, select_rulebook_sections
+from backend.app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
+from backend.app.ai.services.fallbacks import mock_rulebook_extract
+from backend.app.ai.services.json_utils import dumps_context, parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.ai.services.text_chunker import chunk_text, select_rulebook_sections
 
 
 class RulebookExtractorAgent:

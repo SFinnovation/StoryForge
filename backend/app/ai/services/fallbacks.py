@@ -1,14 +1,14 @@
-"""无 LLM API Key 时的演示/mock 响应，便于本地联调。"""
+﻿"""无 LLM API Key 时的演示/mock 响应，便于本地联调。"""
 
-from app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
-from app.ai.schemas.critic import CriticOutput, CriticScores
-from app.ai.schemas.narrative import NarrativeInput, NarrativeOutput, StateUpdates
-from app.ai.schemas.opening import OpeningInput, OpeningNpc, OpeningOutput
-from app.ai.schemas.summary import SummaryInput, SummaryOutput
+from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
+from backend.app.ai.schemas.critic import CriticOutput, CriticScores
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeOutput, StateUpdates
+from backend.app.ai.schemas.opening import OpeningInput, OpeningNpc, OpeningOutput
+from backend.app.ai.schemas.summary import SummaryInput, SummaryOutput
 
 
 def mock_rulebook_extract(data) -> "RulebookExtractionOutput":
-    from app.ai.schemas.rulebook_extract import RulebookExtractionOutput, WorldFactItem
+    from backend.app.ai.schemas.rulebook_extract import RulebookExtractionOutput, WorldFactItem
 
     title = data.source_name if hasattr(data, "source_name") else "D&D 5e 玩家手册"
     return RulebookExtractionOutput(
@@ -34,13 +34,13 @@ def mock_rulebook_extract(data) -> "RulebookExtractionOutput":
 
 
 def mock_module_extract(data) -> "ModuleExtractionOutput":
-    from app.ai.schemas.module_extract import (
+    from backend.app.ai.schemas.module_extract import (
         ModuleExtractionOutput,
         ModuleFactItem,
         ModuleNpcSeed,
         ModuleScene,
     )
-    from app.ai.schemas.opening import OpeningNpc
+    from backend.app.ai.schemas.opening import OpeningNpc
 
     name = getattr(data, "source_name", "追捕克仑可")
     is_krenko = "克仑" in name or "krenko" in name.lower()

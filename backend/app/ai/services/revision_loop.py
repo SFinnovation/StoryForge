@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.ai.schemas.critic import CriticOutput
-from app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
-from app.ai.services.critic_agent import CriticAgent
-from app.ai.services.llm_client import LLMResponse
-from app.ai.services.narrative_agent import NarrativeAgent
-from app.ai.services.prompt_loader import load_prompt
-from app.core.config import settings
+from backend.app.ai.schemas.critic import CriticOutput
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeOutput
+from backend.app.ai.services.critic_agent import CriticAgent
+from backend.app.ai.services.llm_client import LLMResponse
+from backend.app.ai.services.narrative_agent import NarrativeAgent
+from backend.app.ai.services.prompt_loader import load_prompt
+from backend.app.core.config import settings
 
 
 @dataclass
@@ -46,7 +46,7 @@ class RevisionLoop:
             latency_ms += llm.latency_ms
 
         if not settings.AI_ENABLE_CRITIC:
-            from app.ai.services.fallbacks import mock_critic_approve
+            from backend.app.ai.services.fallbacks import mock_critic_approve
 
             review = mock_critic_approve()
             return RevisionLoopResult(

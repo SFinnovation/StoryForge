@@ -1,13 +1,13 @@
-"""ModuleExtractorAgent — 冒险模组精炼提取。"""
+﻿"""ModuleExtractorAgent — 冒险模组精炼提取。"""
 
 from __future__ import annotations
 
-from app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
-from app.ai.services.fallbacks import mock_module_extract
-from app.ai.services.json_utils import parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
-from app.ai.services.text_chunker import truncate_for_llm
+from backend.app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
+from backend.app.ai.services.fallbacks import mock_module_extract
+from backend.app.ai.services.json_utils import parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.ai.services.text_chunker import truncate_for_llm
 
 
 class ModuleExtractorAgent:

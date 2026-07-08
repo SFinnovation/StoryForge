@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+﻿from pydantic import BaseModel, Field
 
-from app.ai.schemas.opening import OpeningNpc
+from backend.app.ai.schemas.opening import OpeningNpc
 
 
 class ModuleScene(BaseModel):

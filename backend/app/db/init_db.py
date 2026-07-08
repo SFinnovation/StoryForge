@@ -1,111 +1,131 @@
-"""数据库初始化与种子数据。"""
+# -*- coding: utf-8 -*-
+"""初始化建表 — 基于 ORM 元数据创建全部 12 张表与索引
 
-from __future__ import annotations
+用法:
+    python -m app.db.init_db          # 建表(已存在则跳过)
+    python -m app.db.init_db --drop   # 危险: 先删后建, 仅限开发环境
+"""
+import sys
 
-import json
-from datetime import datetime
+from sqlalchemy import Index
 
-from sqlalchemy import event, text
-from sqlalchemy.orm import Session
+from backend.app.db.database import Base, SessionLocal, engine
+from backend.app.models import models  # noqa: F401  确保所有模型注册到 Base.metadata
 
-from app.db.base import Base
-from app.db.session import engine
-from app.models.game import (
-    Character,
-    CharacterAttributes,
-    GameSession,
-    User,
-    World,
-)
+# 索引定义(与 schema.sql 保持一致)
+INDEXES = [
+    Index("idx_sessions_user_status", models.GameSession.user_id, models.GameSession.status),
+    Index("idx_messages_session", models.Message.session_id, models.Message.created_at),
+    Index("idx_action_checks_session", models.ActionCheck.session_id),
+    Index("idx_clues_session", models.Clue.session_id),
+    Index("idx_tasks_session_status", models.Task.session_id, models.Task.status),
+    Index("idx_characters_user", models.Character.user_id),
+    # ---- AI 模块扩展表 (ai-module-design §11) ----
+    # memory_retriever 按会话+类型取 Fact; context_builder 按场景取可见 NPC
+    Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
+    Index("idx_npc_profiles_session_scene", models.NpcProfile.session_id, models.NpcProfile.related_scene),
+    Index("idx_ai_reviews_session", models.AiReview.session_id, models.AiReview.created_at),
+]
 
-
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-@event.listens_for(engine, "connect")
-def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:
-    if engine.url.get_backend_name() == "sqlite":
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-
-def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
-    with Session(engine) as db:
-        _seed_if_empty(db)
+DEMO_USER_ID = 1
 
 
-def _seed_if_empty(db: Session) -> None:
-    if db.query(User).first():
+def _ensure_demo_user(db) -> None:
+    if db.get(models.User, DEMO_USER_ID) is not None:
         return
-
-    demo_user = User(
-        username="demo",
-        password_hash="demo-hash",
-        nickname="演示用户",
-        role="user",
-        created_at=_now(),
-    )
-    db.add(demo_user)
-    db.flush()
-
-    worlds = [
-        World(
-            name="奇幻遗迹",
-            type="fantasy",
-            description="古老遗迹中沉睡着失落的魔法文明。",
-            opening_prompt="奇幻冒险，遗迹探索，魔法与危险并存。",
-            rule_style="lite_dnd",
-            difficulty="normal",
-            is_public=1,
-            is_active=1,
-            created_at=_now(),
-        ),
-        World(
-            name="古堡悬疑",
-            type="mystery",
-            description="黑鸦古堡笼罩在浓雾与谜团之中，失踪学者的线索指向这里。",
-            opening_prompt="古堡悬疑，调查推理，不要相信钟声之后出现的人。",
-            rule_style="lite_dnd",
-            difficulty="normal",
-            is_public=1,
-            is_active=1,
-            created_at=_now(),
-        ),
-    ]
-    db.add_all(worlds)
-    db.flush()
-
-    character = Character(
-        user_id=demo_user.id,
-        name="艾琳",
-        profession="调查员",
-        background="研究失踪案件的年轻侦探",
-        motivation="寻找失踪学者留下的最后一份手稿",
-        hp=10,
-        max_hp=10,
-        created_at=_now(),
-    )
-    db.add(character)
-    db.flush()
-
     db.add(
-        CharacterAttributes(
-            character_id=character.id,
-            strength=0,
-            dexterity=2,
-            constitution=1,
-            intelligence=2,
-            wisdom=3,
-            charisma=1,
+        models.User(
+            id=DEMO_USER_ID,
+            username=f"demo_user_{DEMO_USER_ID}",
+            password_hash="demo",
+            nickname="Demo User",
+            role="user",
         )
     )
-    db.commit()
+
+
+def init_db(drop_first: bool = False) -> None:
+    if drop_first:
+        Base.metadata.drop_all(bind=engine)
+        print("已删除所有旧表")
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        _ensure_demo_user(db)
+        db.commit()
+    tables = sorted(Base.metadata.tables.keys())
+    print(f"建表完成({len(tables)} 张): {', '.join(tables)}")
+
+
+def seed_demo_data() -> None:
+    from backend.app.services.world_seed import MODULE_DATA
+
+    world_names = list(MODULE_DATA.keys()) or ["Demo World"]
+    while len(world_names) < 2:
+        world_names.append(f"Demo World {len(world_names) + 1}")
+
+    with SessionLocal() as db:
+        _ensure_demo_user(db)
+
+        for world_id, name in enumerate(world_names[:2], start=1):
+            if db.get(models.World, world_id) is None:
+                db.add(
+                    models.World(
+                        id=world_id,
+                        name=name,
+                        type="mystery",
+                        description=f"{name} demo world",
+                        opening_prompt=f"Open a concise adventure in {name}.",
+                        rule_style="lite_dnd",
+                        difficulty="normal",
+                        created_by=1,
+                    )
+                )
+
+        if db.get(models.Character, 1) is None:
+            db.add(
+                models.Character(
+                    id=1,
+                    user_id=1,
+                    name="Demo Hero",
+                    race_id="human",
+                    class_id="investigator",
+                    background_id="scholar",
+                    motivation="Follow the missing clues.",
+                    level=1,
+                    hp=10,
+                    max_hp=10,
+                    strength=10,
+                    dexterity=12,
+                    constitution=10,
+                    intelligence=14,
+                    wisdom=14,
+                    charisma=11,
+                    skills_json='{"prc": true, "inv": true}',
+                )
+            )
+
+        if db.get(models.GameSession, 1) is None:
+            db.add(
+                models.GameSession(
+                    id=1,
+                    user_id=1,
+                    world_id=2,
+                    character_id=1,
+                    title="Demo Session",
+                    status="playing",
+                    current_scene="main_hall",
+                    current_task="Find the first clue",
+                    summary="",
+                )
+            )
+
+        db.commit()
 
 
 def reset_demo_db() -> None:
-    """测试用：清空并重建。"""
-    Base.metadata.drop_all(bind=engine)
-    init_db()
+    init_db(drop_first=True)
+    seed_demo_data()
+
+
+if __name__ == "__main__":
+    init_db(drop_first="--drop" in sys.argv)
