@@ -5,8 +5,8 @@
 - create:       开局主任务 (commit_opening) / 剧情新任务
 - list_by_session: context_builder / 前端任务面板
 """
-from ..db.models import Task
-from .base import BaseRepo
+from backend.app.models.models import Task
+from backend.app.repositories.base import BaseRepo
 
 VALID_STATUS = ("todo", "doing", "done", "failed")
 

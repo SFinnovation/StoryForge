@@ -5,8 +5,8 @@
 - create:      state_committer 写入顺序第 1/3/4 步 (玩家行动 / 骰子 / AI 旁白)
 - list_all:    summary_agent 聚合全局日志
 """
-from ..db.models import Message
-from .base import BaseRepo
+from backend.app.models.models import Message
+from backend.app.repositories.base import BaseRepo
 
 VALID_SENDER = ("player", "ai", "npc", "system")
 VALID_TYPE = ("narration", "action", "dialogue", "dice", "clue", "task")

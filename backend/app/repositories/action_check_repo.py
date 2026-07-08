@@ -4,8 +4,8 @@
 - create: state_committer 写入顺序第 2 步 (检定记录, 数据来自 rule_service 非 LLM)
 - count_failed_in_scene: clue_pressure 公式的 failed_checks_in_scene 项 (§5.2)
 """
-from ..db.models import ActionCheck
-from .base import BaseRepo
+from backend.app.models.models import ActionCheck
+from backend.app.repositories.base import BaseRepo
 
 
 class ActionCheckRepo(BaseRepo):

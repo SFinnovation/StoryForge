@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
-from app.ai.services.fallbacks import mock_action_parse
-from app.ai.services.json_utils import dumps_context, parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
+from backend.app.ai.services.fallbacks import mock_action_parse
+from backend.app.ai.services.json_utils import dumps_context, parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
 
 
 class ActionParserAgent:

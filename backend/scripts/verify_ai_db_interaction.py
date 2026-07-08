@@ -1,176 +1,166 @@
-"""AI 模块 ↔ 数据库交互专项验证。
+# -*- coding: utf-8 -*-
+"""AI <-> 数据库交互验证 (implementation §12 承诺的 verify_ai_db_interaction)
 
-检验项：
-1. 规则书：rule_service 读取 rules/dnd5e + DB character_attributes
-2. 模组：worlds 表 opening_prompt / description 注入 AI 上下文
-3. 上下文 Fact：开局 seed → action 读取 → Critic 可见 hidden_truth
-4. NPC Profile：开局 seed → context_builder 读取
-5. 写入链：action 后 messages / action_checks / clues / ai_reviews / facts 落库
+闭环: 开局 seed -> 上下文可见性 -> 行动落库 -> 非法输出拦截+回滚 -> 结束报告
+所有 AI 输出用文档 §6.4/§6.5 示例格式的 mock JSON, 不需要 LLM API Key。
+
+用法: cd backend && python -m scripts.verify_ai_db_interaction
 """
-
-from __future__ import annotations
-
-import asyncio
-import os
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test_ai_db_interaction.db")
+from backend.app.db.database import SessionLocal
+from backend.app.models.models import Character, GameSession, Message, Report
+from backend.app.repositories import FactRepo, MessageRepo, NpcRepo
+from backend.app.services.clue_pressure import CluePressureService
+from backend.app.services.context_builder import ContextBuilder
+from backend.app.services.state_committer import CommitError, StateCommitter
+from backend.app.services.world_seed import seed_session_world_data
 
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.orm import Session
-
-from app.db.init_db import reset_demo_db
-from app.db.session import SessionLocal
-from app.main import app
-from app.models.game import (
-    ActionCheck,
-    AiReview,
-    Clue,
-    Fact,
-    Message,
-    NpcProfile,
-    World,
-)
-from app.services.context_builder import build_for_action
-from app.services.memory_retriever import get_hidden_truths, list_npc_profiles
-from app.services.rule_service import SKILLS, roll_check
+PASS = "  [PASS]"
 
 
-def section(title: str) -> None:
-    print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
+def make_narrative(**over) -> dict:
+    """§6.4 格式的 mock 主 Agent 输出"""
+    base = {
+        "narration": "你压低脚步靠近格栅, 靴底却踩碎枯叶。井下传来急促的脚步声远去。",
+        "visible_result": "追踪失败, 目标察觉到了动静。",
+        "new_clues": [{"title": "井下的靴印", "content": "鬼怪尺码, 通向锻炉街方向",
+                       "importance": "important"}],
+        "state_updates": {
+            "scene": "广场西下水道", "summary_delta": "追踪靴印失败。",
+            "hp_delta": 0, "npc_alertness": [], "task_updates": [], "new_facts": [],
+        },
+        "next_options": ["强行拉开格栅", "返回地面打探", "沿运河方向绕行"],
+        "tokens_used": 1240, "latency_ms": 3200,
+    }
+    base.update(over)
+    return base
 
 
-async def main() -> None:
-    reset_demo_db()
-    section("1. 规则书：JSON 规则 + DB 角色属性")
+CHECK_FAIL = {"check_type": "求生", "skill_key": "sur", "attribute_used": "wisdom",
+              "dc": 15, "dice_roll": 6, "ability_modifier": 1, "skill_bonus": 0,
+              "final_value": 7, "is_success": False,
+              "result_text": "d20(6)+感知(+1)=7 < DC15, 失败"}
+REVIEW_OK = {"approved": True, "overall_score": 86, "revision_count": 0,
+             "scores": {"rule_consistency": 90, "world_consistency": 88,
+                        "context_continuity": 85, "character_alignment": 87,
+                        "npc_knowledge_boundary": 84, "clue_progression": 82},
+             "used_fallback": False}
 
-    with SessionLocal() as db:
-        from app.models.game import Character, CharacterAttributes
 
-        character = db.get(Character, 1)
-        attrs = db.query(CharacterAttributes).filter_by(character_id=1).first()
-        assert character and attrs, "种子角色/属性缺失"
+def main() -> None:
+    db = SessionLocal()
+    try:
+        committer = StateCommitter(db)
+        builder = ContextBuilder(db)
+        # 自建全新会话, 与种子会话/其他验证脚本互不干扰 (可重复执行)
+        seed = db.query(GameSession).first()
+        assert seed, "先跑 init_db + seed_data"
+        session = GameSession(user_id=seed.user_id, world_id=seed.world_id,
+                              character_id=seed.character_id,
+                              title="verify_ai_db_interaction 专用会话")
+        db.add(session)
+        db.commit()
+        sid, uid = session.id, session.user_id
+        print(f"验证会话 id={sid} (world_id={session.world_id})")
 
-        assert "prc" in SKILLS, "skills.json 未加载"
-        outcome = roll_check(
-            character,
-            attrs,
-            check_type="观察",
-            skill_key="prc",
-            attribute_used="wisdom",
-            dc=12,
-        )
-        assert outcome.ability_modifier == attrs.wisdom, "属性修正应来自 DB character_attributes"
-        assert outcome.skill_bonus == 2, "调查员察觉(prc)应有熟练加值"
-        print(f"[OK] 规则书检定: d20={outcome.dice_roll} mod={outcome.ability_modifier} skill={outcome.skill_bonus}")
+        # ===== 1. 开局: world_seed + commit_opening =====
+        seeded = seed_session_world_data(db, sid)
+        db.commit()
+        assert not seeded["skipped"] and seeded["facts"] >= 4 and seeded["npcs"] >= 2
+        committer.commit_opening(sid, {
+            "narration": "锯齿监狱的会客室里, 纳休斯·文推来一枚十会盟印记……",
+            "scene_title": "锯齿监狱·会见纳休斯", "main_task": "三天内活捉克仑可"})
+        print(PASS, f"开局: seed {seeded['facts']} facts / {seeded['npcs']} npcs + 旁白与主任务落库")
+        assert seed_session_world_data(db, sid)["skipped"], "重复 seed 未跳过"
+        print(PASS, "world_seed 幂等: 二次调用跳过")
 
-        world = db.get(World, 2)
-        assert world and "古堡" in world.name
-        assert world.opening_prompt, "模组 opening_prompt 应存于 worlds 表"
-        print(f"[OK] 模组 worlds: name={world.name}, prompt_len={len(world.opening_prompt)}")
+        # ===== 2. 上下文可见性 (§1.2 硬约束 3) =====
+        main_ctx = builder.build_for_action(sid, CHECK_FAIL, "我沿着靴印追下去")
+        blob = str(main_ctx)
+        hidden = FactRepo(db).list_by_session(sid, fact_types=["hidden_truth"])
+        assert hidden and all(h.content not in blob for h in hidden), "hidden_truth 泄露进主 Agent 上下文!"
+        assert "隐藏真相" in main_ctx["hidden_truth_summary"]
+        assert main_ctx["rule_result"]["is_success"] is False
+        critic_ctx = builder.build_for_critic(sid, make_narrative(), CHECK_FAIL)
+        assert any(h.content == f["content"] for h in hidden for f in critic_ctx["hidden_truths"])
+        assert any(n["forbidden_knowledge"] for n in critic_ctx["npc_boundaries"])
+        print(PASS, "可见性: 主 Agent 仅见摘要, Critic 见完整 hidden_truth + NPC 禁区")
 
-    section("2. 开局：模组数据 seed 到 facts / npc_profiles")
+        # ===== 3. 合法行动落库 (§8.2 九步) =====
+        r = committer.commit_action(sid, uid, "我沿着靴印追下去",
+                                    make_narrative(), CHECK_FAIL, REVIEW_OK)
+        assert all([r.player_message_id, r.dice_message_id, r.narration_message_id,
+                    r.check_id, r.review_id]) and r.new_clue_ids
+        assert r.turns_since_key_clue == 1 and r.clue_pressure > 0
+        msg = db.get(Message, r.narration_message_id)
+        assert msg.tokens_used == 1240 and msg.latency_ms == 3200
+        print(PASS, f"合法行动 9 步落库, clue_pressure={r.clue_pressure:.2f}, turns=1")
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.post("/api/v1/sessions/start", json={"world_id": 2, "character_id": 1})
-        assert r.status_code == 200, r.text
-        session_id = r.json()["data"]["session"]["id"]
-        opening_narration = r.json()["data"]["opening"]["narration"]
-        print(f"[OK] 开局 session_id={session_id}")
+        # ===== 4. §8.1 非法输出逐条拦截, 且整体回滚 =====
+        before = len(MessageRepo(db).list_all(sid))
+        char = db.get(Character, session.character_id)
+        illegal_cases = [
+            ("HP 越界", make_narrative(state_updates={"hp_delta": -(char.hp + 5)})),
+            ("低压力放 key 线索", make_narrative(new_clues=[
+                {"title": "克仑可的藏身处", "importance": "key"}])),
+            ("hidden_truth 直升 player_known", make_narrative(state_updates={
+                "new_facts": [{"content": hidden[0].content, "fact_type": "player_known"}]})),
+            ("AI 私造 hidden_truth", make_narrative(state_updates={
+                "new_facts": [{"content": "新隐藏真相", "fact_type": "hidden_truth"}]})),
+            ("判定失败写成成功", make_narrative(visible_result="你成功追上了目标")),
+            ("NPC 警觉 delta 越界", make_narrative(state_updates={
+                "npc_alertness": [{"npc_id": "lavinia_001", "delta": 5}]})),
+        ]
+        for label, bad in illegal_cases:
+            try:
+                committer.commit_action(sid, uid, "非法测试", bad, CHECK_FAIL, REVIEW_OK)
+                raise AssertionError(f"{label} 未被拦截!")
+            except CommitError:
+                pass
+        assert len(MessageRepo(db).list_all(sid)) == before, "拦截后残留半截数据"
+        print(PASS, f"§8.1 校验: {len(illegal_cases)} 类非法输出全部拦截且零残留")
 
-    with SessionLocal() as db:
-        facts = db.query(Fact).filter(Fact.session_id == session_id).all()
-        npcs = db.query(NpcProfile).filter(NpcProfile.session_id == session_id).all()
-        assert any(f.fact_type == "world_public" for f in facts), "缺少 world_public Fact"
-        assert any(f.fact_type == "hidden_truth" for f in facts), "缺少 hidden_truth Fact"
-        assert any(f.fact_type == "npc_private" for f in facts), "缺少 npc_private Fact"
-        assert len(npcs) >= 1, "缺少 npc_profiles"
-        print(f"[OK] facts={len(facts)} (world_public/hidden_truth/npc_private)")
-        print(f"[OK] npc_profiles={len(npcs)} names={[n.name for n in npcs]}")
+        # ===== 5. 警觉/解锁的合法路径 =====
+        committer.commit_action(sid, uid, "我大声质问纳休斯", make_narrative(
+            visible_result="纳休斯态度冷了下来。",
+            state_updates={"npc_alertness": [{"npc_id": "lavinia_001", "delta": 2}],
+                           "task_updates": [{"title": "活捉克仑可", "status": "doing"}]}),
+            None, REVIEW_OK)
+        assert NpcRepo(db).get_by_npc_id(sid, "lavinia_001").alertness == 2
+        print(PASS, "合法 npc_alertness/task_updates 正确应用 (无检定轮亦可提交)")
 
-        from app.models.game import GameSession
+        # ===== 6. clue_pressure 服务与档位 =====
+        cp = CluePressureService(db).calculate(sid)
+        assert 0.0 <= cp.clue_pressure <= 1.0 and cp.tier in (
+            "normal", "weak_hint", "strong_hint", "push")
+        print(PASS, f"clue_pressure={cp.clue_pressure:.2f} tier={cp.tier} "
+                    f"(turns={cp.turns_since_key_clue}, failed={cp.failed_checks_in_scene})")
 
-        session = db.get(GameSession, session_id)
-        ctx = build_for_action(db, session)
-        assert world.name in ctx.world.name or "古堡" in ctx.world.name
-        assert ctx.world.opening_prompt, "context 应含 DB 模组 opening_prompt"
-        assert len(ctx.hidden_truths) >= 1, "Critic 应能读到 hidden_truth"
-        assert len(ctx.npc_private_facts) >= 1, "Critic 应能读到 npc_private"
-        assert len(ctx.visible_npcs) >= 1, "Narrative 应能读到 npc_profiles"
-        assert ctx.character.name == "艾琳"
-        print(f"[OK] context_builder 读取: hidden={len(ctx.hidden_truths)} npc_private={len(ctx.npc_private_facts)} npcs={len(ctx.visible_npcs)}")
+        # ===== 7. 结束: summary 上下文 + 报告落库 + 会话置 finished =====
+        s_ctx = builder.build_for_summary(sid)
+        assert s_ctx["player_actions"] and s_ctx["checks"] and s_ctx["clues"]
+        committer.commit_report(sid, {
+            "title": "追捕克仑可·第一夜战报",
+            "story_summary": "追踪失败但获得了靴印线索, 与纳休斯关系紧张。",
+            "key_choices": ["大声质问纳休斯"], "clues": ["井下的靴印"],
+            "ending_type": "open", "ai_suggestion": "下次先做威吓检定再质问。"})
+        db.expire_all()
+        s2 = db.get(GameSession, sid)
+        assert s2.status == "finished" and s2.ended_at is not None
+        assert db.query(Report).filter_by(session_id=sid).first().ending_type == "open"
+        print(PASS, "结束: reports 落库 + 会话 playing->finished (UPDATE 操作)")
 
-    section("3. 行动：DB 上下文参与 AI → 结果写回 DB")
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.post(
-            f"/api/v1/sessions/{session_id}/action",
-            json={"action_text": "我想先观察大厅，看看有没有异常线索。"},
-        )
-        assert r.status_code == 200, r.text
-        data = r.json()["data"]
-        print(f"[OK] action check: dice={data['check']['dice_roll']} success={data['check']['is_success']}")
-
-    with SessionLocal() as db:
-        msgs = db.query(Message).filter(Message.session_id == session_id).count()
-        checks = db.query(ActionCheck).filter(ActionCheck.session_id == session_id).count()
-        reviews = db.query(AiReview).filter(AiReview.session_id == session_id).count()
-        clues = db.query(Clue).filter(Clue.session_id == session_id).count()
-        assert msgs >= 4, f"messages 应含 opening+player+dice+story, got {msgs}"
-        assert checks >= 1, "action_checks 应落库"
-        assert reviews >= 1, "ai_reviews 应落库"
-        print(f"[OK] 落库: messages={msgs} checks={checks} reviews={reviews} clues={clues}")
-
-        session = db.get(GameSession, session_id)
-        ctx2 = build_for_action(db, session)
-        assert len(ctx2.known_clues) >= 0
-        assert ctx2.recent_summary, "session.summary 或 messages 应提供 recent_summary"
-        hidden2 = get_hidden_truths(db, session_id)
-        assert hidden2, "hidden_truth 应跨 action 持久保留"
-        print(f"[OK] 二次读取上下文: clues={len(ctx2.known_clues)} summary_len={len(ctx2.recent_summary)}")
-
-    section("4. Fact API 与 memory_retriever 一致性")
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get(f"/api/v1/sessions/{session_id}/facts?scope=player_known")
-        assert r.status_code == 200
-        api_facts = r.json()["data"]["facts"]
-
-        r2 = await client.get(f"/api/v1/sessions/{session_id}/ai-reviews")
-        assert r2.status_code == 200
-        assert len(r2.json()["data"]["reviews"]) >= 1
-
-        r3 = await client.get(f"/api/v1/sessions/{session_id}/meta")
-        assert r3.status_code == 200
-        assert "clue_pressure" in r3.json()["data"]
-
-    with SessionLocal() as db:
-        from app.services.memory_retriever import get_player_known_facts
-
-        db_player_facts = get_player_known_facts(db, session_id)
-        print(f"[OK] facts API count={len(api_facts)}, retriever player_known={len(db_player_facts)}")
-        print(f"[OK] ai-reviews / meta API 正常")
-
-    section("5. 总结：SummaryAgent 读取 DB 全量日志")
-
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        await client.post(f"/api/v1/sessions/{session_id}/end")
-        r = await client.post(f"/api/v1/sessions/{session_id}/report/generate")
-        assert r.status_code == 200
-        summary = r.json()["data"]["story_summary"]
-        assert len(summary) > 20
-        assert "艾琳" in summary or "古堡" in summary
-        print(f"[OK] SummaryAgent 基于 DB 日志生成报告 len={len(summary)}")
-
-    print("\n" + "=" * 60)
-    print("AI 模块与数据库交互验证全部通过")
-    print("=" * 60)
+        print("\n全部通过 — AI 模块与数据库交互闭环验证完成")
+        print("CRUD 覆盖: 增(messages/clues/facts/...) 查(context/可见性) "
+              "改(session/tasks/npc/hp/report) 三类以上 ✓")
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

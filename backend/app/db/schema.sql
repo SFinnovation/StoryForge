@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS characters (
 -- ------------------------------------------------------------
 -- 4. 跑团会话
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS sessions (
+CREATE TABLE IF NOT EXISTS game_sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER NOT NULL REFERENCES users(id),
     world_id      INTEGER NOT NULL REFERENCES worlds(id),
@@ -86,6 +86,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     current_scene TEXT,
     current_task  TEXT,
     summary       TEXT,
+    -- AI 模块扩展 (ai-module-design §5.4)
+    clue_pressure        REAL    NOT NULL DEFAULT 0.0
+                         CHECK (clue_pressure BETWEEN 0.0 AND 1.0),
+    turns_since_key_clue INTEGER NOT NULL DEFAULT 0
+                         CHECK (turns_since_key_clue >= 0),
     started_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     ended_at      DATETIME
 );
@@ -95,7 +100,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id   INTEGER NOT NULL REFERENCES sessions(id),
+    session_id   INTEGER NOT NULL REFERENCES game_sessions(id),
     sender_type  TEXT NOT NULL
                  CHECK (sender_type IN ('player', 'ai', 'npc', 'system')),
     sender_name  TEXT,
@@ -103,6 +108,9 @@ CREATE TABLE IF NOT EXISTS messages (
     message_type TEXT NOT NULL
                  CHECK (message_type IN ('narration', 'action', 'dialogue',
                                          'dice', 'clue', 'task')),
+    -- AI 旁白性能指标 (ai-module-design §8.2 第 4 步)
+    tokens_used  INTEGER,
+    latency_ms   INTEGER,
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -113,8 +121,9 @@ CREATE TABLE IF NOT EXISTS messages (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS action_checks (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id       INTEGER NOT NULL REFERENCES sessions(id),
+    session_id       INTEGER NOT NULL REFERENCES game_sessions(id),
     message_id       INTEGER REFERENCES messages(id),
+    scene            TEXT,               -- 检定发生场景 (clue_pressure 统计用)
     action_text      TEXT NOT NULL,
     check_type       TEXT,
     skill_key        TEXT,
@@ -134,7 +143,7 @@ CREATE TABLE IF NOT EXISTS action_checks (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clues (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id    INTEGER NOT NULL REFERENCES sessions(id),
+    session_id    INTEGER NOT NULL REFERENCES game_sessions(id),
     title         TEXT NOT NULL,
     content       TEXT,
     source_scene  TEXT,
@@ -148,7 +157,7 @@ CREATE TABLE IF NOT EXISTS clues (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS tasks (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id  INTEGER NOT NULL REFERENCES sessions(id),
+    session_id  INTEGER NOT NULL REFERENCES game_sessions(id),
     title       TEXT NOT NULL,
     description TEXT,
     status      TEXT DEFAULT 'todo'
@@ -162,7 +171,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS reports (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id       INTEGER NOT NULL UNIQUE REFERENCES sessions(id),
+    session_id       INTEGER NOT NULL UNIQUE REFERENCES game_sessions(id),
     title            TEXT,
     story_summary    TEXT,
     key_choices_json TEXT DEFAULT '[]' CHECK (json_valid(key_choices_json)),
@@ -177,10 +186,88 @@ CREATE TABLE IF NOT EXISTS reports (
 -- ------------------------------------------------------------
 -- 索引（规格书 §6.3 + 面向 P1 查询的补充）
 -- ------------------------------------------------------------
-CREATE INDEX IF NOT EXISTS idx_sessions_user_status  ON sessions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_status  ON game_sessions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_messages_session      ON messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_action_checks_session ON action_checks(session_id);
 -- 补充: 线索/任务面板与角色列表的常用查询路径
 CREATE INDEX IF NOT EXISTS idx_clues_session         ON clues(session_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_session_status  ON tasks(session_id, status);
 CREATE INDEX IF NOT EXISTS idx_characters_user       ON characters(user_id);
+
+-- ============================================================
+-- §11 AI 模块扩展表 (依据 ai-module-design.md §4 / §6.5 / §11.2)
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- 10. Fact 分层存储
+--     fact_type: world_public 公开 / player_known 玩家已知 /
+--                hidden_truth 隐藏真相 / npc_private NPC 私有 /
+--                session_fact 会话事实 / temporary 临时状态
+--     visibility_json 例: {"player": false, "npcs": ["butler_001"], "dm": true}
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS facts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      INTEGER NOT NULL REFERENCES game_sessions(id),
+    content         TEXT NOT NULL,
+    fact_type       TEXT NOT NULL
+                    CHECK (fact_type IN ('world_public', 'player_known', 'hidden_truth',
+                                         'npc_private', 'session_fact', 'temporary')),
+    visibility_json TEXT DEFAULT '{"player": false, "npcs": [], "dm": true}'
+                    CHECK (json_valid(visibility_json)),
+    related_scene   TEXT,
+    importance      TEXT DEFAULT 'normal'
+                    CHECK (importance IN ('normal', 'important', 'key')),
+    status          TEXT NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('locked', 'active', 'resolved')),
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
+-- 11. NPC 人格与知识边界
+--     context_builder 组装 visible_npcs;
+--     critic_agent 依据 forbidden_knowledge 检测信息泄露
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS npc_profiles (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id               INTEGER NOT NULL REFERENCES game_sessions(id),
+    npc_id                   TEXT NOT NULL,           -- 如 'butler_001'
+    name                     TEXT NOT NULL,
+    personality              TEXT,
+    knowledge_scope_json     TEXT DEFAULT '[]' CHECK (json_valid(knowledge_scope_json)),
+    forbidden_knowledge_json TEXT DEFAULT '[]' CHECK (json_valid(forbidden_knowledge_json)),
+    speaking_style           TEXT,
+    related_scene            TEXT,                    -- NpcRepo.list_visible(session, scene)
+    is_visible               INTEGER NOT NULL DEFAULT 1 CHECK (is_visible IN (0, 1)),
+    alertness                INTEGER NOT NULL DEFAULT 0 CHECK (alertness >= 0),
+    created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (session_id, npc_id)
+);
+
+-- ------------------------------------------------------------
+-- 12. Critic Agent 审核记录
+--     scores_json 六维: rule_consistency / world_consistency /
+--     context_continuity / character_alignment /
+--     npc_knowledge_boundary / clue_progression
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_reviews (
+    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id                 INTEGER NOT NULL REFERENCES game_sessions(id),
+    message_id                 INTEGER REFERENCES messages(id),
+    approved                   INTEGER NOT NULL CHECK (approved IN (0, 1)),
+    overall_score              INTEGER NOT NULL CHECK (overall_score BETWEEN 0 AND 100),
+    scores_json                TEXT DEFAULT '{}' CHECK (json_valid(scores_json)),
+    fatal_errors_json          TEXT DEFAULT '[]' CHECK (json_valid(fatal_errors_json)),
+    revision_instructions_json TEXT DEFAULT '[]' CHECK (json_valid(revision_instructions_json)),
+    revision_count             INTEGER NOT NULL DEFAULT 0 CHECK (revision_count >= 0),
+    used_fallback              INTEGER NOT NULL DEFAULT 0 CHECK (used_fallback IN (0, 1)),
+    tokens_used                INTEGER,
+    latency_ms                 INTEGER,
+    created_at                 DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
+-- AI 模块索引
+-- ------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_facts_session_type          ON facts(session_id, fact_type);
+CREATE INDEX IF NOT EXISTS idx_npc_profiles_session_scene  ON npc_profiles(session_id, related_scene);
+CREATE INDEX IF NOT EXISTS idx_ai_reviews_session          ON ai_reviews(session_id, created_at);

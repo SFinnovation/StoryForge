@@ -1,10 +1,10 @@
 """无 LLM API Key 时的演示/mock 响应，便于本地联调。"""
 
-from app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
-from app.ai.schemas.critic import CriticOutput, CriticScores
-from app.ai.schemas.narrative import NarrativeInput, NarrativeOutput, StateUpdates
-from app.ai.schemas.opening import OpeningInput, OpeningNpc, OpeningOutput
-from app.ai.schemas.summary import SummaryInput, SummaryOutput
+from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
+from backend.app.ai.schemas.critic import CriticOutput, CriticScores
+from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeOutput, StateUpdates
+from backend.app.ai.schemas.opening import OpeningInput, OpeningNpc, OpeningOutput
+from backend.app.ai.schemas.summary import SummaryInput, SummaryOutput
 
 
 def mock_opening(data: OpeningInput) -> OpeningOutput:

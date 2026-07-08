@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import chapters, characters, export, sessions, stories, worldbuilding, worlds
+from backend.app.api.v1 import chapters, characters, export, sessions, stories, worldbuilding, worlds
 
 api_router = APIRouter()
 

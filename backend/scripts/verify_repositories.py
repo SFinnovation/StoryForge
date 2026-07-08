@@ -9,8 +9,14 @@
 
 用法: cd backend && python -m scripts.verify_repositories
 """
-from app.db.database import SessionLocal
-from app.repositories import (ActionCheckRepo, AiReviewRepo, ClueRepo,
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.app.db.database import SessionLocal
+from backend.app.repositories import (ActionCheckRepo, AiReviewRepo, ClueRepo,
                               FactRepo, MessageRepo, NpcRepo, SessionRepo,
                               TaskRepo)
 

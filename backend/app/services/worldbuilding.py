@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.models.worldbuilding import WorldbuildingEntry
-from app.schemas.worldbuilding import WorldbuildingEntryCreate, WorldbuildingEntryUpdate
+from backend.app.models.worldbuilding import WorldbuildingEntry
+from backend.app.schemas.worldbuilding import WorldbuildingEntryCreate, WorldbuildingEntryUpdate
 
 
 class WorldbuildingService:

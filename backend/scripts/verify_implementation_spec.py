@@ -7,16 +7,16 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # 使用独立测试库，避免污染开发库
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_storyforge_verify.db")
 
 from httpx import ASGITransport, AsyncClient
 
-from app.db.init_db import reset_demo_db
-from app.main import app
+from backend.app.db.init_db import reset_demo_db
+from backend.app.main import app
 
 
 REQUIRED_ACTION_FIELDS = {

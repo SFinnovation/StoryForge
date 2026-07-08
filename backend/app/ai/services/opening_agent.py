@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from app.ai.schemas.opening import OpeningInput, OpeningOutput
-from app.ai.services.fallbacks import mock_opening
-from app.ai.services.json_utils import dumps_context, parse_model
-from app.ai.services.llm_client import LLMResponse, get_llm_client
-from app.ai.services.prompt_loader import load_prompt, render_prompt
+from backend.app.ai.schemas.opening import OpeningInput, OpeningOutput
+from backend.app.ai.services.fallbacks import mock_opening
+from backend.app.ai.services.json_utils import dumps_context, parse_model
+from backend.app.ai.services.llm_client import LLMResponse, get_llm_client
+from backend.app.ai.services.prompt_loader import load_prompt, render_prompt
 
 
 class OpeningAgent:

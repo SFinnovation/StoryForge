@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id, get_db_session
-from app.models.game import Character, World
-from app.schemas.api_response import success
+from backend.app.api.deps import get_current_user_id, get_db_session
+from backend.app.models.models import Character, World
+from backend.app.schemas.api_response import success
 
 router = APIRouter(tags=["worlds"])
 
@@ -30,7 +30,7 @@ def list_worlds(db: Session = Depends(get_db_session)):
 def get_world(world_id: int, db: Session = Depends(get_db_session)):
     world = db.get(World, world_id)
     if world is None or not world.is_active:
-        from app.core.exceptions import StoryForgeError
+        from backend.app.core.exceptions import StoryForgeError
 
         raise StoryForgeError("world not found", status_code=404)
     return success(

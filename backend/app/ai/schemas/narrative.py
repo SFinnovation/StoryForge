@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
-from app.ai.schemas.character import CharacterCard, WorldContext
-from app.ai.schemas.critic import CriticOutput
+from backend.app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.critic import CriticOutput
 
 
 class CheckResult(BaseModel):

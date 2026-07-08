@@ -7,15 +7,15 @@
   clue_pressure                       -> ActionCheckRepo.count_failed_in_scene
   world_seed                          -> FactRepo(create, allow_protected=True) / NpcRepo.create_batch
 """
-from .action_check_repo import ActionCheckRepo
-from .ai_review_repo import AiReviewRepo
-from .clue_repo import ClueRepo
-from .fact_repo import FactRepo
-from .message_repo import MessageRepo
-from .npc_repo import NpcRepo
-from .report_repo import ReportRepo
-from .session_repo import SessionRepo
-from .task_repo import TaskRepo
+from backend.app.repositories.action_check_repo import ActionCheckRepo
+from backend.app.repositories.ai_review_repo import AiReviewRepo
+from backend.app.repositories.clue_repo import ClueRepo
+from backend.app.repositories.fact_repo import FactRepo
+from backend.app.repositories.message_repo import MessageRepo
+from backend.app.repositories.npc_repo import NpcRepo
+from backend.app.repositories.report_repo import ReportRepo
+from backend.app.repositories.session_repo import SessionRepo
+from backend.app.repositories.task_repo import TaskRepo
 
 __all__ = [
     "ActionCheckRepo", "AiReviewRepo", "ClueRepo", "FactRepo",

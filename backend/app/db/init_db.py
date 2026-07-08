@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Initialize database tables from ORM metadata.
+"""初始化建表 — 基于 ORM 元数据创建全部 12 张表与索引
 
-Usage:
-    python -m app.db.init_db
-    python -m app.db.init_db --drop
+用法:
+    python -m app.db.init_db          # 建表(已存在则跳过)
+    python -m app.db.init_db --drop   # 危险: 先删后建, 仅限开发环境
 """
-
-from __future__ import annotations
-
 import sys
 
 from sqlalchemy import Index
 
-from .database import Base, engine
-from backend.app.models import models  # noqa: F401 - register models in Base.metadata
+from backend.app.db.database import Base, SessionLocal, engine
+from backend.app.models import models  # noqa: F401  确保所有模型注册到 Base.metadata
 
-
+# 索引定义(与 schema.sql 保持一致)
 INDEXES = [
     Index("idx_sessions_user_status", models.GameSession.user_id, models.GameSession.status),
     Index("idx_messages_session", models.Message.session_id, models.Message.created_at),
@@ -23,17 +20,101 @@ INDEXES = [
     Index("idx_clues_session", models.Clue.session_id),
     Index("idx_tasks_session_status", models.Task.session_id, models.Task.status),
     Index("idx_characters_user", models.Character.user_id),
+    # ---- AI 模块扩展表 (ai-module-design §11) ----
+    # memory_retriever 按会话+类型取 Fact; context_builder 按场景取可见 NPC
+    Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
+    Index("idx_npc_profiles_session_scene", models.NpcProfile.session_id, models.NpcProfile.related_scene),
+    Index("idx_ai_reviews_session", models.AiReview.session_id, models.AiReview.created_at),
 ]
 
 
 def init_db(drop_first: bool = False) -> None:
     if drop_first:
         Base.metadata.drop_all(bind=engine)
-        print("Dropped existing tables.")
-
+        print("已删除所有旧表")
     Base.metadata.create_all(bind=engine)
     tables = sorted(Base.metadata.tables.keys())
-    print(f"Created tables ({len(tables)}): {', '.join(tables)}")
+    print(f"建表完成({len(tables)} 张): {', '.join(tables)}")
+
+
+def seed_demo_data() -> None:
+    from backend.app.services.world_seed import MODULE_DATA
+
+    world_names = list(MODULE_DATA.keys()) or ["Demo World"]
+    while len(world_names) < 2:
+        world_names.append(f"Demo World {len(world_names) + 1}")
+
+    with SessionLocal() as db:
+        if db.get(models.User, 1) is None:
+            db.add(
+                models.User(
+                    id=1,
+                    username="admin",
+                    password_hash="demo",
+                    nickname="Host",
+                    role="admin",
+                )
+            )
+
+        for world_id, name in enumerate(world_names[:2], start=1):
+            if db.get(models.World, world_id) is None:
+                db.add(
+                    models.World(
+                        id=world_id,
+                        name=name,
+                        type="mystery",
+                        description=f"{name} demo world",
+                        opening_prompt=f"Open a concise adventure in {name}.",
+                        rule_style="lite_dnd",
+                        difficulty="normal",
+                        created_by=1,
+                    )
+                )
+
+        if db.get(models.Character, 1) is None:
+            db.add(
+                models.Character(
+                    id=1,
+                    user_id=1,
+                    name="Demo Hero",
+                    race_id="human",
+                    class_id="investigator",
+                    background_id="scholar",
+                    motivation="Follow the missing clues.",
+                    level=1,
+                    hp=10,
+                    max_hp=10,
+                    strength=10,
+                    dexterity=12,
+                    constitution=10,
+                    intelligence=14,
+                    wisdom=14,
+                    charisma=11,
+                    skills_json='{"prc": true, "inv": true}',
+                )
+            )
+
+        if db.get(models.GameSession, 1) is None:
+            db.add(
+                models.GameSession(
+                    id=1,
+                    user_id=1,
+                    world_id=2,
+                    character_id=1,
+                    title="Demo Session",
+                    status="playing",
+                    current_scene="main_hall",
+                    current_task="Find the first clue",
+                    summary="",
+                )
+            )
+
+        db.commit()
+
+
+def reset_demo_db() -> None:
+    init_db(drop_first=True)
+    seed_demo_data()
 
 
 if __name__ == "__main__":

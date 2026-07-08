@@ -7,8 +7,8 @@
 """
 from datetime import datetime
 
-from ..db.models import GameSession
-from .base import BaseRepo
+from backend.app.models.models import GameSession
+from backend.app.repositories.base import BaseRepo
 
 
 class SessionRepo(BaseRepo):

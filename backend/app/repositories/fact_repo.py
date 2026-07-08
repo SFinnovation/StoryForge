@@ -11,8 +11,8 @@
 """
 import json
 
-from ..db.models import Fact
-from .base import BaseRepo
+from backend.app.models.models import Fact
+from backend.app.repositories.base import BaseRepo
 
 VALID_FACT_TYPES = (
     "world_public", "player_known", "hidden_truth",

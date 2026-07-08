@@ -3,12 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.ai.services.llm_client import close_llm_client, init_llm_client
-from app.api.v1.router import api_router
-from app.core.config import settings
-from app.core.exceptions import StoryForgeError
-from app.db.init_db import init_db
-from app.schemas.api_response import error
+from backend.app.ai.services.llm_client import close_llm_client, init_llm_client
+from backend.app.api.v1.router import api_router
+from backend.app.core.config import settings
+from backend.app.core.exceptions import StoryForgeError
+from backend.app.db.init_db import init_db
+from backend.app.schemas.api_response import error
 
 
 @asynccontextmanager

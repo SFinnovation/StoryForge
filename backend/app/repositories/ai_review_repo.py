@@ -6,8 +6,8 @@
 """
 import json
 
-from ..db.models import AiReview
-from .base import BaseRepo
+from backend.app.models.models import AiReview
+from backend.app.repositories.base import BaseRepo
 
 
 class AiReviewRepo(BaseRepo):

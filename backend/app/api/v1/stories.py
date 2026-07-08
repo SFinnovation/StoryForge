@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.schemas.story import StoryCreate, StoryResponse, StoryUpdate
-from app.services.story import story_service
+from backend.app.api.deps import get_db_session
+from backend.app.schemas.story import StoryCreate, StoryResponse, StoryUpdate
+from backend.app.services.story import story_service
 
 router = APIRouter(prefix="/stories", tags=["stories"])
 

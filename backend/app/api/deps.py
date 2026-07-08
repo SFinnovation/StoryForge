@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from backend.app.db.database import get_db
 
 DEMO_USER_ID = 1
 

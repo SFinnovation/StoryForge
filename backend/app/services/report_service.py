@@ -7,11 +7,11 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import StoryForgeError
-from app.models.game import Clue, GameSession, Report
-from app.schemas.session_schema import ReportDTO
-from app.services.ai_service import get_ai_service
-from app.services.context_builder import build_for_summary
+from backend.app.core.exceptions import StoryForgeError
+from backend.app.models.models import Clue, GameSession, Report
+from backend.app.schemas.session_schema import ReportDTO
+from backend.app.services.ai_service import get_ai_service
+from backend.app.services.context_builder import build_for_summary
 
 
 def _now() -> str:

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.models.story import Story
-from app.schemas.story import StoryCreate, StoryUpdate
+from backend.app.models.story import Story
+from backend.app.schemas.story import StoryCreate, StoryUpdate
 
 
 class StoryService:

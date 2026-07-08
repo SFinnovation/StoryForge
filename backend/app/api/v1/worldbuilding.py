@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db_session
-from app.schemas.worldbuilding import (
+from backend.app.api.deps import get_db_session
+from backend.app.schemas.worldbuilding import (
     WorldbuildingEntryCreate,
     WorldbuildingEntryResponse,
     WorldbuildingEntryUpdate,
 )
-from app.services.worldbuilding import worldbuilding_service
+from backend.app.services.worldbuilding import worldbuilding_service
 
 router = APIRouter(prefix="/worldbuilding", tags=["worldbuilding"])
 

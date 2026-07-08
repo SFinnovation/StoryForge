@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.models.chapter import Chapter
-from app.schemas.chapter import ChapterCreate, ChapterUpdate
+from backend.app.models.chapter import Chapter
+from backend.app.schemas.chapter import ChapterCreate, ChapterUpdate
 
 
 class ChapterService:

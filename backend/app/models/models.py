@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ORM 模型 — 与 schema.sql 一一对应的 9 张表
+"""ORM 模型 — 与 schema.sql 一一对应的 12 张表 (9 基础 + 3 AI 扩展)
 
 约定:
 - 静态 D&D 5e 规则存于 rules/dnd5e/*.json, 不入库
@@ -9,7 +9,7 @@
 """
 from datetime import datetime
 
-from sqlalchemy import (CheckConstraint, DateTime, ForeignKey, Integer,
+from sqlalchemy import (CheckConstraint, DateTime, Float, ForeignKey, Integer,
                         String, Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -95,8 +95,8 @@ class Character(Base):
 
 
 class GameSession(Base):
-    """跑团会话 (表名 sessions; 类名避免与 sqlalchemy Session 混淆)"""
-    __tablename__ = "sessions"
+    """跑团会话 (表名 game_sessions, 与 ai-module-design §5.4/§11.2 一致)"""
+    __tablename__ = "game_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -107,6 +107,9 @@ class GameSession(Base):
     current_scene: Mapped[str | None] = mapped_column(Text)
     current_task: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
+    # ---- AI 模块扩展字段 (ai-module-design §5.4) ----
+    clue_pressure: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    turns_since_key_clue: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -118,6 +121,10 @@ class GameSession(Base):
     clues: Mapped[list["Clue"]] = relationship(back_populates="session")
     tasks: Mapped[list["Task"]] = relationship(back_populates="session")
     report: Mapped["Report | None"] = relationship(back_populates="session", uselist=False)
+    # ---- AI 模块扩展关系 ----
+    facts: Mapped[list["Fact"]] = relationship(back_populates="session")
+    npc_profiles: Mapped[list["NpcProfile"]] = relationship(back_populates="session")
+    ai_reviews: Mapped[list["AiReview"]] = relationship(back_populates="session")
 
     __table_args__ = (
         CheckConstraint("status IN ('playing','finished','archived')", name="ck_sessions_status"),
@@ -128,11 +135,14 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
     sender_type: Mapped[str] = mapped_column(String(10), nullable=False)
     sender_name: Mapped[str | None] = mapped_column(String(50))
     content: Mapped[str] = mapped_column(Text, nullable=False)
     message_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    # ---- AI 旁白性能指标 (ai-module-design §8.2 第 4 步) ----
+    tokens_used: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     session: Mapped["GameSession"] = relationship(back_populates="messages")
@@ -148,8 +158,9 @@ class ActionCheck(Base):
     __tablename__ = "action_checks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
     message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))
+    scene: Mapped[str | None] = mapped_column(String(100))  # 检定发生场景, 供 count_failed_in_scene
     action_text: Mapped[str] = mapped_column(Text, nullable=False)
     check_type: Mapped[str | None] = mapped_column(String(20))
     skill_key: Mapped[str | None] = mapped_column(String(10))     # skills.json 键, 如 'ste'
@@ -175,7 +186,7 @@ class Clue(Base):
     __tablename__ = "clues"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str | None] = mapped_column(Text)
     source_scene: Mapped[str | None] = mapped_column(String(100))
@@ -193,7 +204,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(10), default="todo")
@@ -212,7 +223,7 @@ class Report(Base):
     __tablename__ = "reports"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(100))
     story_summary: Mapped[str | None] = mapped_column(Text)
     key_choices_json: Mapped[str] = mapped_column(Text, default="[]")
@@ -228,4 +239,103 @@ class Report(Base):
         UniqueConstraint("session_id", name="uq_reports_session"),   # 与会话一对一
         CheckConstraint("ending_type IS NULL OR ending_type IN ('good','normal','bad','open')",
                         name="ck_reports_ending"),
+    )
+
+# ============================================================
+# AI 模块扩展表 (ai-module-design §11.2)
+# ============================================================
+
+
+class Fact(Base):
+    """Fact 分层存储 (ai-module-design §4.2)
+
+    - fact_type 六类: world_public / player_known / hidden_truth /
+      npc_private / session_fact / temporary (MVP 用前三类 + npc_private)
+    - visibility_json 例: {"player": false, "npcs": ["butler_001"], "dm": true}
+    - status: locked(未解锁) -> active(生效中) -> resolved(已了结)
+    """
+    __tablename__ = "facts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    fact_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    visibility_json: Mapped[str] = mapped_column(Text, default='{"player": false, "npcs": [], "dm": true}')
+    related_scene: Mapped[str | None] = mapped_column(String(100))
+    importance: Mapped[str] = mapped_column(String(10), default="normal")
+    status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    session: Mapped["GameSession"] = relationship(back_populates="facts")
+
+    __table_args__ = (
+        CheckConstraint(
+            "fact_type IN ('world_public','player_known','hidden_truth',"
+            "'npc_private','session_fact','temporary')",
+            name="ck_facts_type"),
+        CheckConstraint("importance IN ('normal','important','key')", name="ck_facts_importance"),
+        CheckConstraint("status IN ('locked','active','resolved')", name="ck_facts_status"),
+    )
+
+
+class NpcProfile(Base):
+    """NPC 人格与知识边界 (ai-module-design §4.3)
+
+    MVP 不建独立 NPC Agent, 本表用于:
+    - context_builder 组装 visible_npcs
+    - critic_agent 检测 NPC 是否说出 forbidden_knowledge
+    """
+    __tablename__ = "npc_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
+    npc_id: Mapped[str] = mapped_column(String(50), nullable=False)  # 如 'butler_001'
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    personality: Mapped[str | None] = mapped_column(Text)
+    knowledge_scope_json: Mapped[str] = mapped_column(Text, default="[]")
+    forbidden_knowledge_json: Mapped[str] = mapped_column(Text, default="[]")
+    speaking_style: Mapped[str | None] = mapped_column(String(100))
+    related_scene: Mapped[str | None] = mapped_column(String(100))  # NpcRepo.list_visible 用
+    is_visible: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    alertness: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # §8.1: delta 单次<=3
+    alertness: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # state_updates.npc_alertness
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    session: Mapped["GameSession"] = relationship(back_populates="npc_profiles")
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "npc_id", name="uq_npc_profiles_session_npc"),
+        CheckConstraint("is_visible IN (0, 1)", name="ck_npc_visible"),
+        CheckConstraint("alertness BETWEEN 0 AND 10", name="ck_npc_alertness"),
+    )
+
+
+class AiReview(Base):
+    """Critic Agent 审核记录 (ai-module-design §6.5 / §8.2 第 9 步)
+
+    scores_json 六维: rule_consistency / world_consistency / context_continuity /
+    character_alignment / npc_knowledge_boundary / clue_progression
+    """
+    __tablename__ = "ai_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("game_sessions.id"), nullable=False)
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"))  # 关联最终 AI 旁白
+    approved: Mapped[int] = mapped_column(Integer, nullable=False)
+    overall_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    scores_json: Mapped[str] = mapped_column(Text, default="{}")
+    fatal_errors_json: Mapped[str] = mapped_column(Text, default="[]")
+    revision_instructions_json: Mapped[str] = mapped_column(Text, default="[]")
+    revision_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    used_fallback: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tokens_used: Mapped[int | None] = mapped_column(Integer)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    session: Mapped["GameSession"] = relationship(back_populates="ai_reviews")
+
+    __table_args__ = (
+        CheckConstraint("approved IN (0, 1)", name="ck_reviews_approved"),
+        CheckConstraint("overall_score BETWEEN 0 AND 100", name="ck_reviews_score"),
+        CheckConstraint("used_fallback IN (0, 1)", name="ck_reviews_fallback"),
     )

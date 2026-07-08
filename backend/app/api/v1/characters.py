@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id, get_db_session
-from app.models.game import Character, CharacterAttributes
-from app.schemas.api_response import success
+from backend.app.api.deps import get_current_user_id, get_db_session
+from backend.app.models.models import Character
+from backend.app.schemas.api_response import success
 
 router = APIRouter(prefix="/characters", tags=["characters"])
 
@@ -19,7 +19,7 @@ def list_characters(
             {
                 "id": c.id,
                 "name": c.name,
-                "profession": c.profession,
+                "profession": c.class_id,
                 "motivation": c.motivation,
                 "hp": c.hp,
                 "max_hp": c.max_hp,
@@ -37,28 +37,23 @@ def get_character(
 ):
     character = db.get(Character, character_id)
     if character is None or character.user_id != user_id:
-        from app.core.exceptions import StoryForgeError
+        from backend.app.core.exceptions import StoryForgeError
 
         raise StoryForgeError("character not found", status_code=404)
-    attrs = (
-        db.query(CharacterAttributes)
-        .filter(CharacterAttributes.character_id == character.id)
-        .first()
-    )
     return success(
         {
             "id": character.id,
             "name": character.name,
-            "profession": character.profession,
-            "background": character.background,
+            "profession": character.class_id,
+            "background": character.background_id,
             "motivation": character.motivation,
             "attributes": {
-                "strength": attrs.strength if attrs else 0,
-                "dexterity": attrs.dexterity if attrs else 0,
-                "constitution": attrs.constitution if attrs else 0,
-                "intelligence": attrs.intelligence if attrs else 0,
-                "wisdom": attrs.wisdom if attrs else 0,
-                "charisma": attrs.charisma if attrs else 0,
+                "strength": character.strength,
+                "dexterity": character.dexterity,
+                "constitution": character.constitution,
+                "intelligence": character.intelligence,
+                "wisdom": character.wisdom,
+                "charisma": character.charisma,
             },
         }
     )

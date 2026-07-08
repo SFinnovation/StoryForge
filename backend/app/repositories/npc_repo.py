@@ -8,8 +8,8 @@
 """
 import json
 
-from ..db.models import NpcProfile
-from .base import BaseRepo
+from backend.app.models.models import NpcProfile
+from backend.app.repositories.base import BaseRepo
 
 
 class NpcRepo(BaseRepo):

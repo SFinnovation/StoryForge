@@ -6,19 +6,19 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import StoryForgeError
-from app.models.game import Character, GameSession, Message, World
-from app.schemas.session_schema import (
+from backend.app.core.exceptions import StoryForgeError
+from backend.app.models.models import Character, GameSession, Message, World
+from backend.app.schemas.session_schema import (
     MessageDTO,
     OpeningDTO,
     SessionDTO,
     SessionStartData,
     SessionStartRequest,
 )
-from app.services.ai_service import get_ai_service
-from app.services.context_builder import build_for_opening
-from app.services.state_committer import commit_opening
-from app.services.world_seed import seed_session_world_data
+from backend.app.services.ai_service import get_ai_service
+from backend.app.services.context_builder import build_for_opening
+from backend.app.services.state_committer import commit_opening
+from backend.app.services.world_seed import seed_session_world_data
 
 
 def _now() -> str:

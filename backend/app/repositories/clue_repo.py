@@ -5,8 +5,8 @@
 - create_batch:    state_committer 写入顺序第 5 步;
                    按 title 去重 (§8.1 校验规则: 不重复 title)
 """
-from ..db.models import Clue
-from .base import BaseRepo
+from backend.app.models.models import Clue
+from backend.app.repositories.base import BaseRepo
 
 VALID_IMPORTANCE = ("normal", "important", "key")
 

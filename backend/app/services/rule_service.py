@@ -7,7 +7,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.models.game import Character, CharacterAttributes
+from backend.app.models.models import Character
 
 RULES_DIR = Path(__file__).resolve().parents[3] / "rules" / "dnd5e"
 
@@ -78,7 +78,7 @@ def resolve_attribute_for_skill(skill_key: str | None, fallback_attribute: str) 
     return fallback_attribute
 
 
-def get_attribute_bonus(attrs: CharacterAttributes | None, attribute: str) -> int:
+def get_attribute_bonus(attrs: object | None, attribute: str) -> int:
     if attrs is None:
         return 0
     return int(getattr(attrs, attribute, 0))
@@ -87,7 +87,8 @@ def get_attribute_bonus(attrs: CharacterAttributes | None, attribute: str) -> in
 def skill_bonus(character: Character, skill_key: str | None) -> int:
     if not skill_key:
         return 0
-    prof_skills = PROFESSION_SKILLS.get(character.profession, set())
+    profession = getattr(character, "profession", None) or getattr(character, "class_id", "")
+    prof_skills = PROFESSION_SKILLS.get(profession, set())
     if skill_key in prof_skills:
         return PROFICIENCY_BONUS
     return 0
@@ -115,7 +116,7 @@ def format_result_text(
 
 def roll_check(
     character: Character,
-    attrs: CharacterAttributes | None,
+    attrs: object | None,
     *,
     check_type: str,
     skill_key: str | None,
