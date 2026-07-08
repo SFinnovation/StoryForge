@@ -7,12 +7,16 @@
 用法: cd backend && python -m scripts.verify_ai_db_interaction
 """
 import sys
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_storyforge_ai_db.db")
+
 from backend.app.db.database import SessionLocal
+from backend.app.db.init_db import reset_demo_db
 from backend.app.models.models import Character, GameSession, Message, Report
 from backend.app.repositories import FactRepo, MessageRepo, NpcRepo
 from backend.app.services.clue_pressure import CluePressureService
@@ -53,6 +57,7 @@ REVIEW_OK = {"approved": True, "overall_score": 86, "revision_count": 0,
 
 
 def main() -> None:
+    reset_demo_db()
     db = SessionLocal()
     try:
         committer = StateCommitter(db)
@@ -157,7 +162,7 @@ def main() -> None:
 
         print("\n全部通过 — AI 模块与数据库交互闭环验证完成")
         print("CRUD 覆盖: 增(messages/clues/facts/...) 查(context/可见性) "
-              "改(session/tasks/npc/hp/report) 三类以上 ✓")
+              "改(session/tasks/npc/hp/report) 三类以上 PASS")
     finally:
         db.close()
 

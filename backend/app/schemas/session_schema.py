@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -12,7 +14,7 @@ class MessageDTO(BaseModel):
     message_type: str
     sender_type: str = "player"
     sender_name: str | None = None
-    created_at: str | None = None
+    created_at: datetime | str | None = None
 
 
 class SessionDTO(BaseModel):

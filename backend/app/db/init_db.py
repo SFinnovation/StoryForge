@@ -27,12 +27,31 @@ INDEXES = [
     Index("idx_ai_reviews_session", models.AiReview.session_id, models.AiReview.created_at),
 ]
 
+DEMO_USER_ID = 1
+
+
+def _ensure_demo_user(db) -> None:
+    if db.get(models.User, DEMO_USER_ID) is not None:
+        return
+    db.add(
+        models.User(
+            id=DEMO_USER_ID,
+            username=f"demo_user_{DEMO_USER_ID}",
+            password_hash="demo",
+            nickname="Demo User",
+            role="user",
+        )
+    )
+
 
 def init_db(drop_first: bool = False) -> None:
     if drop_first:
         Base.metadata.drop_all(bind=engine)
         print("已删除所有旧表")
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        _ensure_demo_user(db)
+        db.commit()
     tables = sorted(Base.metadata.tables.keys())
     print(f"建表完成({len(tables)} 张): {', '.join(tables)}")
 
@@ -45,16 +64,7 @@ def seed_demo_data() -> None:
         world_names.append(f"Demo World {len(world_names) + 1}")
 
     with SessionLocal() as db:
-        if db.get(models.User, 1) is None:
-            db.add(
-                models.User(
-                    id=1,
-                    username="admin",
-                    password_hash="demo",
-                    nickname="Host",
-                    role="admin",
-                )
-            )
+        _ensure_demo_user(db)
 
         for world_id, name in enumerate(world_names[:2], start=1):
             if db.get(models.World, world_id) is None:

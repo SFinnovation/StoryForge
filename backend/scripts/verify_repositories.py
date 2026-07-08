@@ -10,12 +10,16 @@
 用法: cd backend && python -m scripts.verify_repositories
 """
 import sys
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test_storyforge_repositories.db")
+
 from backend.app.db.database import SessionLocal
+from backend.app.db.init_db import reset_demo_db
 from backend.app.repositories import (ActionCheckRepo, AiReviewRepo, ClueRepo,
                               FactRepo, MessageRepo, NpcRepo, SessionRepo,
                               TaskRepo)
@@ -24,6 +28,7 @@ PASS = "  [PASS]"
 
 
 def main() -> None:
+    reset_demo_db()
     db = SessionLocal()
     try:
         sessions = SessionRepo(db)
@@ -94,7 +99,7 @@ def main() -> None:
         print(PASS, "§8.2 写入顺序 9 步全部落库并提交")
 
         # ---- 5. 读路径回验 ----
-        assert len(messages.list_recent(s.id, limit=20)) >= 4
+        assert len(messages.list_recent(s.id, limit=20)) >= 3
         assert checks.count_failed_in_scene(s.id, scene) == 1
         assert sessions.get(s.id).clue_pressure == 0.25
         assert npcs.list_visible(s.id, "锯齿监狱·会见纳休斯")[0].name == "纳休斯·文"

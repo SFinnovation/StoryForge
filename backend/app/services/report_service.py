@@ -14,8 +14,8 @@ from backend.app.services.ai_service import get_ai_service
 from backend.app.services.context_builder import build_for_summary
 
 
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _now() -> datetime:
+    return datetime.utcnow()
 
 
 async def generate_report(db: Session, session_id: int, user_id: int) -> ReportDTO:

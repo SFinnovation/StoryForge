@@ -68,28 +68,14 @@ coverage/
 .nyc_output/
 htmlcov/
 
-# 操作系统
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-
 # 本地数据与数据库
 *.db
 *.sqlite
 *.sqlite3
 data/
 uploads/
-<<<<<<< HEAD
-=======
-#数据库追加
-*.db
 backend/*.db
-_pycache_/
 
 # Foundry dnd5e 原始包（体积大，规则已提取到 rules/dnd5e/）
 dnd5e-6.0.x/
 dnd5e-6.0.x.zip
->>>>>>> 38f0109237ad6b65c9edd640994015f91dcc4f4e

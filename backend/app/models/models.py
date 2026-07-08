@@ -297,7 +297,6 @@ class NpcProfile(Base):
     speaking_style: Mapped[str | None] = mapped_column(String(100))
     related_scene: Mapped[str | None] = mapped_column(String(100))  # NpcRepo.list_visible 用
     is_visible: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    alertness: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # §8.1: delta 单次<=3
     alertness: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # state_updates.npc_alertness
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -1,124 +1,132 @@
 # 架构设计
 
-> 本文档随项目演进持续更新。当前为初始骨架，技术选型确定后请填充具体内容。
+> 本文档描述当前仓库的实际架构与模块边界。更完整的目标规格见 [implementation-spec.md](implementation-spec.md)，逐模块检查见 [module-audit.md](module-audit.md)。
 
 ## 概述
 
-StoryForge 采用分层架构，将用户界面、业务逻辑与数据持久化解耦，便于独立开发与测试。
+StoryForge 采用前后端分离的 monorepo 结构。后端负责规则判定、AI 编排、数据持久化与 API；前端负责跑团体验界面；D&D 5e 规则以静态 JSON 存放在 `rules/dnd5e/`，不写入业务库。
 
+```text
+frontend (Vue 3 + Vite)
+        |
+        | HTTP / JSON
+        v
+backend.app.api.v1 (FastAPI Router)
+        |
+        v
+services / ai orchestrator / repositories
+        |
+        v
+SQLAlchemy ORM -> SQLite
+
+rules/dnd5e/*.json -> rule_service / character creation / action checks
 ```
-┌─────────────────────────────────────┐
-│           客户端 / 前端              │
-└─────────────────┬───────────────────┘
-                  │ API
-┌─────────────────▼───────────────────┐
-│           应用服务层                 │
-│  ┌─────────┐ ┌─────────┐ ┌────────┐ │
-│  │ 故事管理 │ │ 章节编辑 │ │ 导出   │ │
-│  └─────────┘ └─────────┘ └────────┘ │
-└─────────────────┬───────────────────┘
-                  │
-┌─────────────────▼───────────────────┐
-│           数据持久层                 │
-└─────────────────────────────────────┘
+
+## 分层职责
+
+| 层级 | 路径 | 职责 |
+|------|------|------|
+| 前端界面 | `frontend/src/` | 大厅、世界观、档案、角色创建等 Vue 页面原型 |
+| API 层 | `backend/app/api/v1/` | FastAPI 路由，统一返回 `ApiResponse` |
+| 业务服务 | `backend/app/services/` | 会话生命周期、行动编排、规则判定、上下文构建、报告、导出 |
+| AI 模块 | `backend/app/ai/` | 五 Agent、Prompt、LLM Client、JSON Schema、Revision Loop |
+| 仓储层 | `backend/app/repositories/` | Message、Fact、NPC、ActionCheck、Task、Report、AIReview 等读写封装 |
+| 数据模型 | `backend/app/models/` | SQLAlchemy ORM，覆盖 12 张核心表 |
+| Schema | `backend/app/schemas/` 与 `backend/app/ai/schemas/` | API 请求响应和 Agent 输入输出校验 |
+| 规则数据 | `rules/dnd5e/` | D&D 5e SRD 静态规则 |
+| 验证脚本 | `backend/scripts/` | API、AI、DB、仓储和性能验证脚本 |
+
+## 核心业务闭环
+
+```text
+选择世界观
+  -> 创建角色
+  -> POST /sessions/start
+  -> OpeningAgent 生成开局
+  -> 玩家提交行动
+  -> ActionParserAgent 解析技能与 DC
+  -> rule_service 后端掷骰并计算结果
+  -> ContextBuilder 裁剪上下文
+  -> NarrativeAgent 生成剧情
+  -> CriticAgent 审核
+  -> RevisionLoop 修正或 fallback
+  -> StateCommitter 按事务写入消息、判定、线索、任务、Fact、AI Review
+  -> SummaryAgent 生成本局报告
 ```
 
 ## 核心模块
 
-### 1. 故事管理（Story）
+### 1. 会话与行动
 
-- 创建、读取、更新、删除故事项目
-- 元数据：标题、简介、标签、状态
+- 路由：`backend/app/api/v1/sessions.py`
+- 服务：`session_service.py`、`action_service.py`
+- 状态：`playing -> finished -> archived`
+- 约束：只有 `playing` 会话允许继续提交行动；MVP 中同一用户同时只允许一个 `playing` 会话。
 
-### 2. 章节与大纲（Chapter / Outline）
+### 2. 规则引擎
 
-- 树形大纲结构
-- 章节正文编辑与排序
+- 规则文件：`rules/dnd5e/core.json`、`skills.json`、`classes.json`、`races.json`、`backgrounds.json`
+- 服务：`rule_service.py`
+- 硬约束：掷骰、属性修正、熟练加值和成败判定由后端生成，AI 只负责理解行动和叙事。
 
-### 3. 设定库（Worldbuilding）
+### 3. AI 编排
 
-- 角色、地点、时间线等设定条目
-- 与故事/章节的关联
+- Agent：Opening、ActionParser、Narrative、Critic、Summary
+- 编排入口：`backend/app/ai/orchestrator.py` 与 `backend/app/services/ai_service.py`
+- 兜底：未配置 `LLM_API_KEY` 时走 `fallbacks.py`，便于本地闭环联调。
 
-### 4. 导出（Export）
+### 4. 数据持久化
 
-- 支持 Markdown、PDF 等格式（待选型）
+基础表：
 
-<<<<<<< HEAD
-## 数据模型（草案）
-=======
-### 5. 行动判定（Action + Dice）
+- `users`
+- `worlds`
+- `characters`
+- `game_sessions`
+- `messages`
+- `action_checks`
+- `clues`
+- `tasks`
+- `reports`
 
-- AI 解析行动 → 映射 `skill_key`（如 `ste` 隐匿）
-- **后端**执行 d20 + 属性修正 + 熟练加值
-- 结果持久化到 `action_checks` 与 `messages`
+AI 扩展表：
 
-### 6. 规则数据（Rules）
+- `facts`
+- `npc_profiles`
+- `ai_reviews`
 
-- `rules/dnd5e/`：从 Foundry dnd5e 包提取的 SRD JSON
-- `rule_service` 加载并校验角色创建与检定
+DDL 位于 `backend/app/db/schema.sql`，ORM 位于 `backend/app/models/models.py`。根目录 `数据库存储结构设计.sql` 是数据库设计交付文档，当前后端以 `backend/app/db/schema.sql` 和 ORM 为运行依据。
 
-### 7. AI 编排（AI Service）— ✅ 已实现
+### 5. 传统故事创作模块
 
-双 Agent 架构：**Opening → ActionParser → RuleEngine → Narrative → Critic → RevisionLoop → StateCommitter → Summary**
+仓库仍保留故事、章节、设定库和导出模块：
 
-| 文档 | 说明 |
-|------|------|
-| [ai-module-design.md](ai-module-design.md) | 架构设计、Fact 分层、接口规格 |
-| [ai-module-implementation.md](ai-module-implementation.md) | **实现说明**：代码结构、DB 交互、API、测试 |
+- `stories.py` / `story_service.py`
+- `chapters.py` / `chapter_service.py`
+- `worldbuilding.py` / `worldbuilding_service.py`
+- `export.py` / `ExportService`
 
-代码：`backend/app/ai/`（Agent）· `backend/app/services/`（编排）· `backend/scripts/verify_*.py`（验证）
+这些模块提供基础 CRUD 和 Markdown 导出，PDF 导出仍是待实现项。
 
-### 8. 报告与可视化（Report + Admin）
+## API 原则
 
-- 结局报告落库 `reports`
-- 管理端统计、ECharts 图表（P1）
+- 路由统一挂载在 `/api/v1`
+- 成功响应使用 `{"code": 0, "message": "ok", "data": ...}`
+- 业务错误通过 `StoryForgeError` 转换为统一错误响应
+- 当前认证仍为演示占位：`get_current_user_id()` 固定返回 `1`
 
-## 数据模型（概要）
->>>>>>> 38f0109237ad6b65c9edd640994015f91dcc4f4e
+## 当前技术债
 
-```
-Story
-├── id
-├── title
-├── description
-├── created_at / updated_at
-└── chapters[] → Chapter
-    ├── id
-    ├── title
-    ├── content
-    ├── order
-    └── parent_id (大纲层级)
-```
-
-## API 设计原则
-
-- RESTful 或 RPC（待选型）
-- 统一错误响应格式
-- 分页、过滤、排序约定
-
-## 非功能需求
-
-| 项 | 目标 |
-|----|------|
-| 可测试性 | 核心业务逻辑与 I/O 分离 |
-| 可扩展性 | 插件或模块边界清晰 |
-| 安全性 | 敏感配置不入库、不提交 Git |
-
-## 待决策项
-
-- [ ] 前后端技术栈
-- [ ] 数据库选型
-- [ ] 认证与授权方案
-- [ ] 部署与 CI/CD 平台
+- 前端尚未接入真实 API、Vue Router、Pinia 与统一请求层。
+- 前端构建已通过，但 `/src/assets/auth-bg.png` 当前未解析，运行时需要补资产或调整路径。
+- 认证当前为 MVP bearer token，生产前仍需标准 JWT/RBAC 与密码安全策略。
+- `POST /characters` 已接入 D&D 5e MVP 规则链，27 点购与选择型种族/技能分支仍待完善。
+- `ExportService.export_pdf()` 仍返回 501。
+- `.env.example` 与运行默认值需持续保持一致，避免不同启动目录下 SQLite 路径混乱。
 
 ## 修订记录
 
 | 日期 | 说明 |
 |------|------|
-<<<<<<< HEAD
-=======
-| 2026-07-08 | AI 模块 MVP 实现，补充实现说明文档链接 |
-| 2026-07-07 | 对齐灵境档案跑团方向，替换原故事创作骨架 |
->>>>>>> 38f0109237ad6b65c9edd640994015f91dcc4f4e
+| 2026-07-08 | 清理冲突标记，按当前仓库结构重写架构说明 |
 | 2026-07-07 | 初始文档骨架 |

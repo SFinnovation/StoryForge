@@ -621,6 +621,7 @@ python scripts/bench_ai_module.py
 | Opening Critic | §9.3 P1 | — | ⏳ 未实现 |
 | 流式输出 SSE | P3 | — | ⏳ 未实现 |
 | JWT 认证 | P0 其他组 | demo user_id=1 | ⏳ 占位 |
+| 角色接口 | P0 其他组 | `POST /characters`、`GET /characters` | ✅ D&D MVP 可用 |
 
 ---
 
@@ -629,8 +630,8 @@ python scripts/bench_ai_module.py
 ### 当前限制
 
 1. **认证**：使用 `demo` 用户（`user_id=1`），JWT 待其他模块接入
-2. **角色创建**：种子角色可用，`POST /characters` 待实现
-3. **职业熟练**：`PROFESSION_SKILLS` 硬编码映射，未完全对接 D&D 5e `skills_json`
+2. **角色创建**：`POST /characters` 已支持标准数组、种族加值、职业 HP/豁免、背景与职业技能熟练；27 点购和选择型种族分支待补
+3. **职业熟练**：已写入 `skills_json`，复杂多段技能选择仍按 MVP 简化处理
 4. **Mock 模式**：`new_clues` 较少，配置 LLM 后才有丰富动态线索
 5. **开局 Critic**：设计文档 P1 预留，当前开局不经 Critic 审核
 

@@ -21,8 +21,8 @@ from backend.app.services.state_committer import commit_opening
 from backend.app.services.world_seed import seed_session_world_data
 
 
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _now() -> datetime:
+    return datetime.utcnow()
 
 
 def get_playing_session(db: Session, session_id: int, user_id: int) -> GameSession:
@@ -47,7 +47,7 @@ async def start_session(db: Session, user_id: int, payload: SessionStartRequest)
 
     world = db.get(World, payload.world_id)
     character = db.get(Character, payload.character_id)
-    if world is None or not world.is_active:
+    if world is None or not world.is_enabled:
         raise StoryForgeError("world not found", status_code=404)
     if character is None or character.user_id != user_id:
         raise StoryForgeError("character not found", status_code=404)
@@ -142,6 +142,25 @@ def end_session(db: Session, session_id: int, user_id: int) -> SessionDTO:
         world_id=session.world_id,
         character_id=session.character_id,
     )
+
+
+def get_session_detail(db: Session, session_id: int, user_id: int) -> dict:
+    session = db.get(GameSession, session_id)
+    if session is None or session.user_id != user_id:
+        raise StoryForgeError("session not found", status_code=404)
+    messages = list_messages(db, session_id, user_id)
+    return {
+        "session": SessionDTO(
+            id=session.id,
+            status=session.status,
+            title=session.title,
+            current_scene=session.current_scene,
+            current_task=session.current_task,
+            world_id=session.world_id,
+            character_id=session.character_id,
+        ).model_dump(),
+        "messages": [m.model_dump() for m in messages],
+    }
 
 
 def list_messages(db: Session, session_id: int, user_id: int) -> list[MessageDTO]:

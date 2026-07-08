@@ -43,6 +43,15 @@ def list_sessions(
     )
 
 
+@router.get("/{session_id}")
+def get_session_detail(
+    session_id: int,
+    db: Session = Depends(get_db_session),
+    user_id: int = Depends(get_current_user_id),
+):
+    return success(session_service.get_session_detail(db, session_id, user_id))
+
+
 @router.get("/{session_id}/messages")
 def get_messages(
     session_id: int,
