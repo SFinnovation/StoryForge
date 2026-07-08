@@ -43,6 +43,9 @@ env/
 credentials.json
 secrets/
 
+# PowerShell 本机缓存（误写入仓库根目录的运行时缓存）
+/Microsoft/
+
 # IDE 与编辑器
 .idea/
 .vscode/*
@@ -79,3 +82,10 @@ backend/*.db
 # Foundry dnd5e 原始包（体积大，规则已提取到 rules/dnd5e/）
 dnd5e-6.0.x/
 dnd5e-6.0.x.zip
+
+# AKP 生成物（knowledge pack 可由 docx 幂等重建，不入库）
+data/knowledge_packs/
+# AKP 解压临时目录
+.akp_tmp/
+.akp_smoke/
+auditable-knowledge-packs-main.zip
