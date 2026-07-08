@@ -3,7 +3,8 @@
 > **版本**：v1.1 · **更新**：2026-07-08  
 > **状态**：✅ MVP + 内容提取 Agent 已实现并接入后端  
 > **设计规格**：[ai-module-design.md](ai-module-design.md)  
-> **项目规格**：[implementation-spec.md](implementation-spec.md)
+> **项目规格**：[implementation-spec.md](implementation-spec.md)  
+> **知识引擎集成**：[akp-integration-plan.md](akp-integration-plan.md)（规则书 / 模组可审计检索，方案待实施）
 
 ---
 
@@ -707,6 +708,7 @@ python scripts/bench_ai_module.py
 - [ ] 完整 `skills_json` 角色创建对接
 - [ ] Critic 独立小模型（`AI_CRITIC_MODEL`）调优
 - [ ] 前端 SSE 流式叙事
+- [ ] 接入 Auditable Knowledge Packs 作为规则书 / 模组底层知识引擎，见 [akp-integration-plan.md](akp-integration-plan.md)
 
 ---
 

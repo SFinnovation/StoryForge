@@ -108,6 +108,15 @@ DDL 位于 `backend/app/db/schema.sql`，ORM 位于 `backend/app/models/models.p
 
 这些模块提供基础 CRUD 和 Markdown 导出，PDF 导出仍是待实现项。
 
+### 6. 内容知识引擎（Content Knowledge）— 📋 方案待实施
+
+规则书（PHB）与冒险模组 docx 的导入分两层：
+
+- **语义层（已实现）**：`RulebookExtractorAgent` / `ModuleExtractorAgent` → `rulebook_packs` / `adventure_modules`
+- **知识引擎层（规划）**：接入 [Auditable Knowledge Packs](akp-integration-plan.md)，提供确定性、强出处、可复现的非向量检索，作为 Extractor Agent 的底层证据源与 Critic 的规则校验依据
+
+集成方案见 [akp-integration-plan.md](akp-integration-plan.md)（三种模式、P0–P2 路线图、可开关回退）。
+
 ## API 原则
 
 - 路由统一挂载在 `/api/v1`
@@ -128,5 +137,6 @@ DDL 位于 `backend/app/db/schema.sql`，ORM 位于 `backend/app/models/models.p
 
 | 日期 | 说明 |
 |------|------|
+| 2026-07-08 | 新增内容知识引擎章节，链接 AKP 集成方案 |
 | 2026-07-08 | 清理冲突标记，按当前仓库结构重写架构说明 |
 | 2026-07-07 | 初始文档骨架 |
