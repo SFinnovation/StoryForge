@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { authApi, clearAuth, getStoredToken, getStoredUser } from './api/client'
 import HomePage from './HomePage.vue'
 import ScriptPage from './ScriptPage.vue'
 import ArchivePage from './ArchivePage.vue'
@@ -13,7 +14,10 @@ const PAGE_ROLE = 'role'
 
 const currentPage = ref(PAGE_HOME)
 const selectedWorldview = ref(null)
-const isAuthenticated = ref(false)
+const isAuthenticated = ref(Boolean(getStoredToken()))
+const isBootstrapping = ref(isAuthenticated.value)
+const currentUser = ref(getStoredUser())
+const latestSession = ref(null)
 
 const pageComponentMap = {
   [PAGE_HOME]: HomePage,
@@ -40,18 +44,65 @@ const handleNavigate = (page, worldview = null) => {
   selectedWorldview.value = worldview
 }
 
-const handleEnterApp = () => {
+const handleEnterApp = (session = {}) => {
+  currentUser.value = session.user || getStoredUser()
   isAuthenticated.value = true
 }
+
+const handleLogout = () => {
+  clearAuth()
+  currentUser.value = null
+  selectedWorldview.value = null
+  latestSession.value = null
+  currentPage.value = PAGE_HOME
+  isAuthenticated.value = false
+}
+
+const handleSessionCreated = (payload) => {
+  latestSession.value = payload
+  currentPage.value = PAGE_ARCHIVE
+}
+
+onMounted(async () => {
+  if (!getStoredToken()) {
+    isBootstrapping.value = false
+    return
+  }
+
+  try {
+    currentUser.value = await authApi.me()
+    isAuthenticated.value = true
+  } catch {
+    handleLogout()
+  } finally {
+    isBootstrapping.value = false
+  }
+})
 </script>
 
 <template>
-  <LoginRegister v-if="!isAuthenticated" @enter="handleEnterApp" />
+  <div v-if="isBootstrapping" class="app-loading">正在连接灵境档案...</div>
+  <LoginRegister v-else-if="!isAuthenticated" @enter="handleEnterApp" />
   <component
     :is="activeComponent"
     v-else
     :current-page="currentPage"
     :worldview="selectedWorldview"
+    :current-user="currentUser"
+    :latest-session="latestSession"
     @navigate="handleNavigate"
+    @session-created="handleSessionCreated"
+    @logout="handleLogout"
   />
 </template>
+
+<style scoped>
+.app-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #090806;
+  color: #f5b95b;
+  font-size: 16px;
+}
+</style>

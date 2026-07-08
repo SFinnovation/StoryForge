@@ -1,5 +1,7 @@
 ﻿<script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { sessionsApi } from './api/client'
+import systemBackground from '../背景/系统主界面.png'
 
 const emit = defineEmits(['navigate'])
 
@@ -7,14 +9,20 @@ const props = defineProps({
   currentPage: {
     type: String,
     default: '档案'
+  },
+  latestSession: {
+    type: Object,
+    default: null
   }
 })
 
 const searchKeyword = ref('')
 const activeNav = ref(props.currentPage)
 const selectedArchive = ref(0)
+const sessions = ref([])
+const archiveStatus = ref('')
 
-const archives = [
+const fallbackArchives = [
   {
     id: 1,
     title: '龙与地下城 DND',
@@ -77,27 +85,85 @@ const archives = [
   }
 ]
 
+const mapSessionToArchive = (session) => ({
+  id: session.id,
+  title: session.title || `冒险会话 #${session.id}`,
+  tags: [session.status === 'playing' ? '进行中' : session.status],
+  character: '当前角色',
+  level: 1,
+  date: session.started_at ? new Date(session.started_at).toLocaleDateString() : '--',
+  status: session.status === 'playing' ? '进行中' : session.status,
+  statusColor: session.status === 'playing' ? '#4ade80' : '#fbbf24',
+  actionBtn: session.status === 'playing' ? '继续冒险' : '查看总结',
+  icon: '📜',
+  chapter: session.current_scene || '开局场景',
+  lastRecord: session.current_scene || '该会话已由后端创建，进入后可继续行动。',
+  hp: session.status === 'playing' ? 78 : 100,
+  sessionId: session.id,
+  timeline: [
+    {
+      event: session.current_scene || '会话已创建',
+      date: session.started_at ? new Date(session.started_at).toLocaleDateString() : '--'
+    }
+  ]
+})
+
+const archives = computed(() => {
+  const list = sessions.value.length > 0 ? sessions.value.map(mapSessionToArchive) : fallbackArchives
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return list
+
+  const filtered = list.filter((archive) => (
+    archive.title.toLowerCase().includes(keyword) ||
+    archive.tags.join(' ').toLowerCase().includes(keyword) ||
+    archive.lastRecord.toLowerCase().includes(keyword)
+  ))
+  return filtered.length > 0 ? filtered : list
+})
+
 const handleNavigate = (page) => {
   activeNav.value = page
   emit('navigate', page)
 }
 
+const loadSessions = async () => {
+  archiveStatus.value = ''
+  try {
+    sessions.value = await sessionsApi.list()
+    if (selectedArchive.value >= archives.value.length) {
+      selectedArchive.value = 0
+    }
+  } catch (error) {
+    archiveStatus.value = error?.message || '档案列表同步失败，已显示本地示例。'
+  }
+}
+
 const handleSearch = () => {
-  console.log('搜索档案:', searchKeyword.value)
+  selectedArchive.value = 0
 }
 
 const selectArchive = (index) => {
+  if (index < 0) return
   selectedArchive.value = index
 }
 
 const handleAction = (archive) => {
-  console.log(archive.actionBtn, archive.title)
+  selectArchive(archives.value.findIndex((item) => item.id === archive.id))
+  archiveStatus.value = archive.sessionId
+    ? `已选中会话 #${archive.sessionId}，行动页完成后可继续冒险。`
+    : `${archive.actionBtn}：${archive.title}`
 }
+
+watch(() => props.latestSession, () => {
+  loadSessions()
+})
+
+onMounted(loadSessions)
 </script>
 
 <template>
   <div class="archive-page">
-    <div class="page-bg">
+    <div class="page-bg" :style="{ backgroundImage: `url(${systemBackground})` }">
       <div class="bg-overlay"></div>
       <div class="particles"></div>
     </div>
@@ -209,6 +275,8 @@ const handleAction = (archive) => {
           </button>
         </div>
       </section>
+
+      <p v-if="archiveStatus" class="archive-status">{{ archiveStatus }}</p>
 
       <section class="archive-content">
         <div class="archive-list">
@@ -356,7 +424,6 @@ const handleAction = (archive) => {
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: url('/src/assets/auth-bg.png');
   background-size: cover;
   background-position: center;
   z-index: 0;
@@ -706,6 +773,16 @@ const handleAction = (archive) => {
   padding: 48px;
   max-width: 1400px;
   margin: 0 auto;
+}
+
+.archive-status {
+  position: relative;
+  z-index: 10;
+  max-width: 1400px;
+  margin: 42px auto -24px;
+  padding: 0 48px;
+  color: #f5b95b;
+  font-size: 13px;
 }
 
 .archive-list {

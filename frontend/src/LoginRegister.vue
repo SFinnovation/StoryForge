@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
+import { authApi, clearAuth } from './api/client'
 import loginBackground from '../背景/login界面.png'
 import productIcon from '../图标/产品图标.png'
 
@@ -7,11 +8,17 @@ const emit = defineEmits(['enter'])
 
 const STORAGE_KEY = 'storyforge_auth_users'
 const SESSION_KEY = 'storyforge_auth_session'
+const USERNAME_MIN_LENGTH = 3
+const USERNAME_MAX_LENGTH = 50
+const PASSWORD_MIN_LENGTH = 6
+const PASSWORD_MAX_LENGTH = 128
+const NICKNAME_MAX_LENGTH = 50
 
 const isLogin = ref(true)
 const showPassword = ref(false)
 const authError = ref('')
 const authMessage = ref('')
+const isSubmitting = ref(false)
 
 const loginForm = reactive({
   username: '',
@@ -27,6 +34,9 @@ const registerForm = reactive({
 })
 
 const rememberedUser = ref(localStorage.getItem(SESSION_KEY) || '')
+
+const getErrorMessage = (error, fallback) =>
+  typeof error?.message === 'string' && error.message.trim() ? error.message : fallback
 
 const menuItems = computed(() => [
   {
@@ -75,12 +85,44 @@ const switchMode = (loginMode) => {
 
 const handleGuestEnter = () => {
   authError.value = ''
+  clearAuth()
   authMessage.value = '已以游客身份进入。'
-  emit('enter')
+  emit('enter', {
+    user: {
+      username: 'guest',
+      nickname: '游客'
+    }
+  })
 }
 
-const handleLogin = () => {
+const handleLogin = async () => {
   authError.value = ''
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+
+  try {
+    const result = await authApi.login({
+      username: loginForm.username,
+      password: loginForm.password
+    })
+
+    if (loginForm.remember) {
+      localStorage.setItem(SESSION_KEY, loginForm.username)
+    } else {
+      localStorage.removeItem(SESSION_KEY)
+    }
+
+    rememberedUser.value = loginForm.username
+    authMessage.value = `欢迎回来，${result.user?.nickname || result.user?.username || loginForm.username}。`
+    emit('enter', { user: result.user })
+    return
+  } catch (error) {
+    authError.value = getErrorMessage(error, '账号或密码不正确。')
+    return
+  } finally {
+    isSubmitting.value = false
+  }
+
   const users = getUsers()
   const matchedUser = users.find(
     (user) => user.username === loginForm.username && user.password === loginForm.password
@@ -102,17 +144,69 @@ const handleLogin = () => {
   emit('enter')
 }
 
-const handleRegister = () => {
+const handleRegister = async () => {
   authError.value = ''
 
-  if (!registerForm.nickname || !registerForm.username || !registerForm.password) {
+  const nickname = registerForm.nickname.trim()
+  const username = registerForm.username.trim()
+  const password = registerForm.password
+  const confirmPassword = registerForm.confirmPassword
+
+  if (!nickname || !username || !password) {
     authError.value = '请完整填写注册信息。'
     return
   }
 
-  if (registerForm.password !== registerForm.confirmPassword) {
+  if (username.length < USERNAME_MIN_LENGTH) {
+    authError.value = `用户名至少需要 ${USERNAME_MIN_LENGTH} 个字符。`
+    return
+  }
+
+  if (username.length > USERNAME_MAX_LENGTH) {
+    authError.value = `用户名不能超过 ${USERNAME_MAX_LENGTH} 个字符。`
+    return
+  }
+
+  if (nickname.length > NICKNAME_MAX_LENGTH) {
+    authError.value = `昵称不能超过 ${NICKNAME_MAX_LENGTH} 个字符。`
+    return
+  }
+
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    authError.value = `密码至少需要 ${PASSWORD_MIN_LENGTH} 个字符。`
+    return
+  }
+
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    authError.value = `密码不能超过 ${PASSWORD_MAX_LENGTH} 个字符。`
+    return
+  }
+
+  if (password !== confirmPassword) {
     authError.value = '两次输入的密码不一致。'
     return
+  }
+
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+
+  try {
+    const result = await authApi.register({
+      nickname,
+      username,
+      password
+    })
+
+    localStorage.setItem(SESSION_KEY, username)
+    rememberedUser.value = username
+    authMessage.value = '注册成功，已自动进入大厅。'
+    emit('enter', { user: result.user })
+    return
+  } catch (error) {
+    authError.value = getErrorMessage(error, '注册失败，请稍后再试。')
+    return
+  } finally {
+    isSubmitting.value = false
   }
 
   const users = getUsers()
@@ -241,7 +335,13 @@ if (rememberedUser.value) {
                 <circle cx="12" cy="7" r="4"/>
               </svg>
             </span>
-            <input v-model="registerForm.nickname" type="text" placeholder="昵称" required />
+            <input
+              v-model="registerForm.nickname"
+              type="text"
+              placeholder="昵称"
+              :maxlength="NICKNAME_MAX_LENGTH"
+              required
+            />
           </label>
           <label class="field">
             <span class="field-icon">
@@ -249,7 +349,14 @@ if (rememberedUser.value) {
                 <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
             </span>
-            <input v-model="registerForm.username" type="text" placeholder="用户名 / 邮箱" required />
+            <input
+              v-model="registerForm.username"
+              type="text"
+              placeholder="用户名 / 邮箱"
+              :minlength="USERNAME_MIN_LENGTH"
+              :maxlength="USERNAME_MAX_LENGTH"
+              required
+            />
           </label>
           <label class="field">
             <span class="field-icon">
@@ -258,7 +365,14 @@ if (rememberedUser.value) {
                 <path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
             </span>
-            <input v-model="registerForm.password" type="password" placeholder="密码" required />
+            <input
+              v-model="registerForm.password"
+              type="password"
+              placeholder="密码"
+              :minlength="PASSWORD_MIN_LENGTH"
+              :maxlength="PASSWORD_MAX_LENGTH"
+              required
+            />
           </label>
           <label class="field">
             <span class="field-icon">
@@ -271,6 +385,8 @@ if (rememberedUser.value) {
               v-model="registerForm.confirmPassword"
               type="password"
               placeholder="确认密码"
+              :minlength="PASSWORD_MIN_LENGTH"
+              :maxlength="PASSWORD_MAX_LENGTH"
               required
             />
           </label>

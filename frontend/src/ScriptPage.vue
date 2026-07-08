@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { worldsApi } from './api/client'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
 import goblinCover from '../游戏种类/哥布林.jpg'
@@ -22,7 +23,7 @@ const selectedWorldview = ref(0)
 
 const navItems = ['大厅', '世界观', '档案', '角色', '商城']
 
-const worldviews = [
+const fallbackWorldviews = [
   {
     id: 1,
     title: '龙与地下城 DND',
@@ -109,13 +110,46 @@ const worldviews = [
   }
 ]
 
-const selectedData = computed(() => worldviews[selectedWorldview.value])
+const backendWorldIdByKind = ref({})
+const isLoadingWorldviews = ref(false)
+const worldviewsError = ref('')
+
+const classifyPresetWorldview = (worldview) => {
+  if (worldview.title.includes('DND')) return 'dnd'
+  if (worldview.title.includes('COC')) return 'coc'
+  return 'custom'
+}
+
+const classifyBackendWorld = (world) => {
+  const text = `${world.name || ''} ${world.type || ''}`.toLowerCase()
+  if (/dnd|krenko|dragon|龙|克伦可/.test(text)) return 'dnd'
+  if (/coc|古堡|悬疑|mystery/.test(text)) return 'coc'
+  if (/custom|自定义/.test(text)) return 'custom'
+  return null
+}
+
+const worldviews = computed(() => fallbackWorldviews.map((worldview) => {
+  const kind = classifyPresetWorldview(worldview)
+  const backendId = backendWorldIdByKind.value[kind]
+
+  return {
+    ...worldview,
+    source: 'preset',
+    backendId,
+    modules: (worldview.modules || []).map((module) => ({
+      ...module,
+      worldId: backendId
+    }))
+  }
+}))
+
+const selectedData = computed(() => worldviews.value[selectedWorldview.value] || worldviews.value[0])
 
 const filteredWorldviews = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return worldviews
+  if (!keyword) return worldviews.value
 
-  return worldviews.filter((worldview) => {
+  return worldviews.value.filter((worldview) => {
     const haystack = [
       worldview.title,
       worldview.subtitle,
@@ -138,7 +172,7 @@ const handleNavigate = (page) => {
 }
 
 const selectWorldview = (worldviewId) => {
-  const index = worldviews.findIndex((item) => item.id === worldviewId)
+  const index = worldviews.value.findIndex((item) => item.id === worldviewId)
   if (index >= 0) {
     selectedWorldview.value = index
   }
@@ -149,8 +183,32 @@ const enterWorldview = () => {
 }
 
 const enterModule = (module) => {
-  console.log('进入模组:', module)
+  emit('navigate', '角色', {
+    ...selectedData.value,
+    selectedModule: module,
+    backendId: module.worldId || selectedData.value.backendId
+  })
 }
+
+onMounted(async () => {
+  isLoadingWorldviews.value = true
+  worldviewsError.value = ''
+
+  try {
+    const worlds = await worldsApi.list()
+    backendWorldIdByKind.value = worlds.reduce((result, world) => {
+      const kind = classifyBackendWorld(world)
+      if (kind && !result[kind]) {
+        result[kind] = world.id
+      }
+      return result
+    }, {})
+  } catch (error) {
+    worldviewsError.value = error?.message || '世界观列表读取失败，已使用本地预设。'
+  } finally {
+    isLoadingWorldviews.value = false
+  }
+})
 </script>
 
 <template>

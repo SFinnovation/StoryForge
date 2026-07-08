@@ -1,5 +1,7 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { charactersApi, sessionsApi, worldsApi } from './api/client'
+import JoinRoomModal from './JoinRoomModal.vue'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
 import cubeIcon from '../图标/魔方.png'
@@ -12,14 +14,25 @@ const props = defineProps({
   currentPage: {
     type: String,
     default: '大厅'
+  },
+  currentUser: {
+    type: Object,
+    default: null
   }
 })
 
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(['navigate', 'session-created'])
 
 const showCreateModal = ref(false)
+const showJoinModal = ref(false)
 const roomCode = ref('')
 const activeNav = ref(props.currentPage)
+const worlds = ref([])
+const characters = ref([])
+const sessions = ref([])
+const apiStatus = ref('')
+const joinRoomError = ref('')
+const isSubmitting = ref(false)
 
 const createRoomForm = reactive({
   roomName: '追捕克伦可团',
@@ -63,7 +76,7 @@ const actionCards = [
   }
 ]
 
-const quickRooms = [
+const fallbackQuickRooms = [
   {
     name: '追捕克伦可团',
     players: '2/4',
@@ -76,18 +89,59 @@ const quickRooms = [
   }
 ]
 
-const lastAdventure = {
+const fallbackLastAdventure = {
   title: '追捕克伦可',
   chapter: '第 1 章 · 地下线索',
   progress: 68,
   teamSync: 61
 }
 
-const scriptTemplates = [
+const fallbackScriptTemplates = [
   '追捕克伦可',
   '龙息之城的阴影',
   '失落矿洞的秘密'
 ]
+
+const scriptTemplates = computed(() => {
+  if (worlds.value.length > 0) {
+    return worlds.value.map((world) => world.name)
+  }
+
+  return fallbackScriptTemplates
+})
+
+const quickRooms = computed(() => {
+  if (sessions.value.length === 0) return fallbackQuickRooms
+
+  return sessions.value.slice(0, 3).map((session) => ({
+    name: session.title || `会话 #${session.id}`,
+    players: session.status === 'playing' ? '进行中' : session.status,
+    owner: props.currentUser?.nickname || props.currentUser?.username || '当前用户',
+    sessionId: session.id
+  }))
+})
+
+const joinableRooms = computed(() => quickRooms.value.map((room, index) => ({
+  id: room.sessionId || `preset-${index}`,
+  sessionId: room.sessionId || null,
+  name: room.name,
+  worldview: index === 1 ? 'COC 7th' : index === 2 ? 'Custom' : 'D&D 5e',
+  players: room.players,
+  status: room.sessionId ? '进行中' : '招募中'
+})))
+
+const lastAdventure = computed(() => {
+  const session = sessions.value[0]
+  if (!session) return fallbackLastAdventure
+
+  return {
+    title: session.title || `会话 #${session.id}`,
+    chapter: session.current_scene || '等待继续',
+    progress: session.status === 'playing' ? 68 : 100,
+    teamSync: session.status === 'playing' ? 61 : 100,
+    sessionId: session.id
+  }
+})
 
 const aiStyles = [
   { value: 'classic', label: '经典说书' },
@@ -103,25 +157,119 @@ const difficulties = [
   { value: 'nightmare', label: '噩梦' }
 ]
 
-const handleCreateRoom = () => {
-  console.log('创建房间数据:', { ...createRoomForm })
-  showCreateModal.value = false
+const refreshLobbyData = async () => {
+  try {
+    const [worldList, characterList, sessionList] = await Promise.all([
+      worldsApi.list(),
+      charactersApi.list(),
+      sessionsApi.list()
+    ])
+    worlds.value = worldList
+    characters.value = characterList
+    sessions.value = sessionList
+  } catch (error) {
+    apiStatus.value = error?.message || '大厅数据同步失败，请稍后重试。'
+  }
 }
 
-const handleJoinRoom = () => {
-  console.log('加入房间:', { roomCode: roomCode.value })
+const selectedWorld = () => (
+  worlds.value.find((world) => world.name === createRoomForm.scriptTemplate) || worlds.value[0] || null
+)
+
+const handleCreateRoom = async () => {
+  apiStatus.value = ''
+
+  if (characters.value.length === 0) {
+    showCreateModal.value = false
+    apiStatus.value = '请先创建角色，再开启冒险。'
+    emit('navigate', '角色', selectedWorld())
+    return
+  }
+
+  const world = selectedWorld()
+  if (!world) {
+    apiStatus.value = '暂时没有可用世界观。'
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    const data = await sessionsApi.start({
+      world_id: world.id,
+      character_id: characters.value[0].id
+    })
+    await refreshLobbyData()
+    showCreateModal.value = false
+    apiStatus.value = '冒险会话已创建。'
+    emit('session-created', data)
+  } catch (error) {
+    apiStatus.value = error?.message || '创建会话失败。'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const openJoinModal = () => {
+  joinRoomError.value = ''
+  showJoinModal.value = true
+}
+
+const closeJoinModal = () => {
+  joinRoomError.value = ''
+  showJoinModal.value = false
+}
+
+const handleJoinRoom = async ({ code = '', room = null } = {}) => {
+  joinRoomError.value = ''
+
+  if (room?.sessionId) {
+    closeJoinModal()
+    emit('session-created', { session: room })
+    return
+  }
+
+  const trimmedCode = code.trim()
+  if (trimmedCode) {
+    const sessionId = Number(trimmedCode)
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      joinRoomError.value = '房间号需要是有效的会话 ID。'
+      return
+    }
+
+    isSubmitting.value = true
+    try {
+      const session = await sessionsApi.get(sessionId)
+      closeJoinModal()
+      emit('session-created', { session })
+    } catch (error) {
+      joinRoomError.value = error?.message || '未找到可加入的房间。'
+    } finally {
+      isSubmitting.value = false
+    }
+    return
+  }
+
+  joinRoomError.value = '当前公开房间是展示样例，需输入真实房间号或选择已有会话。'
 }
 
 const handleContinue = () => {
-  console.log('继续上次冒险:', lastAdventure)
+  if (lastAdventure.value.sessionId) {
+    emit('session-created', { session: lastAdventure.value })
+    return
+  }
+  emit('navigate', '档案')
 }
 
 const handleQuickJoin = (room) => {
-  console.log('快速加入:', room)
+  if (room.sessionId) {
+    emit('session-created', { session: room })
+    return
+  }
+  openJoinModal()
 }
 
 const handleHistory = () => {
-  console.log('查看历史档案')
+  emit('navigate', '档案')
 }
 
 const handleAction = (action) => {
@@ -131,7 +279,7 @@ const handleAction = (action) => {
   }
 
   if (action.key === 'join') {
-    handleJoinRoom()
+    openJoinModal()
     return
   }
 
@@ -147,6 +295,8 @@ const handleNavigate = (page) => {
   activeNav.value = page
   emit('navigate', page)
 }
+
+onMounted(refreshLobbyData)
 </script>
 
 <template>
@@ -183,7 +333,7 @@ const handleNavigate = (page) => {
         <div class="user-chip">
           <div class="user-avatar">夜</div>
           <div class="user-info">
-            <span class="user-name">夜行者</span>
+            <span class="user-name">{{ props.currentUser?.nickname || props.currentUser?.username || '游客' }}</span>
             <span class="user-level">Lv.12</span>
           </div>
         </div>
@@ -236,6 +386,7 @@ const handleNavigate = (page) => {
               <span>{{ card.subtitle }}</span>
             </button>
           </section>
+          <p v-if="apiStatus" class="lobby-status">{{ apiStatus }}</p>
         </div>
 
         <aside class="side-panels">
@@ -302,6 +453,15 @@ const handleNavigate = (page) => {
         </aside>
       </section>
     </main>
+
+    <JoinRoomModal
+      v-if="showJoinModal"
+      :rooms="joinableRooms"
+      :error-message="joinRoomError"
+      @close="closeJoinModal"
+      @join="handleJoinRoom"
+      @clear-error="joinRoomError = ''"
+    />
 
     <div class="modal-overlay" v-if="showCreateModal" @click="showCreateModal = false">
       <div class="modal-content" @click.stop>
@@ -872,6 +1032,12 @@ const handleNavigate = (page) => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.lobby-status {
+  margin-top: 14px;
+  color: #7fd7ff;
+  font-size: 0.95rem;
 }
 
 .action-card {

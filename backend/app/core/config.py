@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_PORT: int = 8080
     DATABASE_URL: str = "sqlite:///./storyforge.db"
+    DB_AUTO_CREATE: bool = True
+    SEED_DEMO_DATA: bool = True
     SECRET_KEY: str = "change-me-use-a-long-random-string-in-production"
     JWT_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
