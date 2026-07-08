@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StoryForge - 选择技能</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* 核心调色板 */
+            --bg-deep: #060504;
+            --bg-panel: rgba(18, 15, 13, 0.75);
+            --bg-card: rgba(10, 8, 7, 0.8);
+            
+            --border-dim: #2a2218;
+            --border-normal: #4a3c2a;
+            --border-glow: #d4b886;
+            
+            --text-title: #d4b886;
+            --text-main: #e0d6c8;
+            --text-dim: #8b7d6b;
+            --text-dark: #5c4e3c;
+            
+            --highlight: #d4b886;
+            --success: #4ade80;
+            
+            --font-main: 'Noto Serif SC', serif;
+            --font-en: 'Cinzel', serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            font-size: 14px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(circle at center, #1a1614 0%, #060504 100%),
+                url('data:image/svg+xml;utf8,<svg width="150" height="150" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.04"/></svg>');
+        }
+
+        .navbar {
+            display: flex; justify-content: space-between; align-items: center;
+            height: 70px; padding: 0 40px; background: rgba(6, 5, 4, 0.95);
+            border-bottom: 1px solid var(--border-normal);
+            flex-shrink: 0; z-index: 10;
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 12px; }
+        .logo-area .icon { font-size: 28px; color: var(--highlight); }
+        .logo-area h1 { font-family: var(--font-en); font-size: 22px; color: var(--text-title); letter-spacing: 1px;}
+        .logo-area span { color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;}
+
+        .nav-links { display: flex; gap: 40px; }
+        .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 16px; transition: 0.3s; position: relative;}
+        .nav-links a:hover { color: var(--text-main); }
+        .nav-links a.active { color: var(--highlight); font-weight: bold; }
+        .nav-links a.active::after {
+            content: ''; position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 2px; background: var(--highlight); box-shadow: 0 0 8px var(--highlight);
+        }
+
+        .user-area { display: flex; align-items: center; gap: 15px; }
+        .user-info { text-align: right; line-height: 1.2;}
+        .user-info .name { color: var(--text-main); font-size: 14px; }
+        .user-info .level { color: var(--text-dim); font-size: 11px; }
+        .avatar-small { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border-normal); background-image: url('https://placehold.co/80x80/1a1614/d4b886?text=User'); background-size: cover; }
+        .icon-btn { background: none; border: 1px solid var(--border-dim); color: var(--text-title); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; transition: 0.2s;}
+        .icon-btn:hover { border-color: var(--border-normal); color: var(--highlight); }
+
+        .main-container {
+            /* 严格规范左右面板宽度，中间自适应，保证所有步骤页面结构一致 */
+            display: grid;
+            grid-template-columns: 260px 1fr 300px;
+            gap: 25px;
+            padding: 25px 40px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-normal); border-radius: 2px; }
+
+        .left-panel { display: flex; flex-direction: column; }
+        .page-title { margin-bottom: 20px; text-align: center; }
+        .page-title h2 { font-size: 24px; color: var(--text-title); font-weight: normal; letter-spacing: 2px; }
+        .page-title .en-title { font-family: var(--font-en); font-size: 12px; color: var(--text-dim); letter-spacing: 3px; margin-top: 4px; }
+        .page-desc { font-size: 12px; color: var(--text-dim); text-align: center; margin-bottom: 15px; line-height: 1.6; }
+        
+        .step-list { display: flex; flex-direction: column; gap: 15px; flex: 1; }
+        
+        .step-item { 
+            display: flex; align-items: center; justify-content: space-between; 
+            padding: 15px 20px; color: var(--text-dim); border: 1px solid transparent; 
+            cursor: pointer; transition: 0.3s; background: rgba(0,0,0,0.2);
+            border-radius: 2px;
+        }
+        .step-item .num { font-family: var(--font-en); font-size: 18px; margin-right: 15px; font-weight: bold;}
+        .step-item .text { flex: 1; font-size: 15px; letter-spacing: 1px;}
+        .step-item .icon { font-size: 14px; opacity: 0.5; }
+        
+        /* 已完成步骤 */
+        .step-item.completed { color: var(--text-main); border-color: var(--border-dim); }
+        .step-item.completed .icon { opacity: 1; color: var(--border-gold); }
+        
+        /* 当前激活步骤 */
+        .step-item.active { 
+            color: var(--highlight); 
+            border: 1px solid var(--border-glow); 
+            background: linear-gradient(90deg, rgba(212, 184, 134, 0.1) 0%, transparent 100%);
+            position: relative;
+            box-shadow: 0 0 15px rgba(212, 184, 134, 0.15) inset, 0 0 10px rgba(212,184,134,0.1);
+        }
+        .step-item.active::before, .step-item.active::after {
+            content: ''; position: absolute; top: 50%; transform: translateY(-50%) rotate(45deg);
+            width: 8px; height: 8px; border: 1px solid var(--highlight); background: var(--bg-deep);
+        }
+        .step-item.active::before { left: -5px; border-top: none; border-right: none; }
+        .step-item.active::after { right: -5px; border-bottom: none; border-left: none; }
+
+        .left-actions { display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 20px;}
+        .btn-outline { 
+            background: rgba(0,0,0,0.5); border: 1px solid var(--border-normal); color: var(--text-dim); 
+            padding: 12px; text-align: center; cursor: pointer; transition: 0.3s; 
+            display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 14px;
+        }
+        .btn-outline:hover { border-color: var(--highlight); color: var(--highlight); background: rgba(212, 184, 134, 0.05); }
+
+        .center-panel { 
+            background: var(--bg-panel); border: 1px solid var(--border-normal); 
+            border-radius: 4px; display: flex; flex-direction: column; 
+            position: relative; box-shadow: inset 0 0 50px rgba(0,0,0,0.8);
+        }
+        
+        .char-summary-top {
+            display: flex; justify-content: center; align-items: center; gap: 15px;
+            padding: 15px; border-bottom: 1px solid var(--border-dim);
+            font-size: 13px; color: var(--text-main); background: rgba(0,0,0,0.4);
+            font-family: var(--font-en);
+        }
+        .char-summary-top .cn-name { font-family: var(--font-main); color: var(--highlight); }
+        .char-summary-top i.fa-circle { font-size: 4px; color: var(--border-normal); }
+
+        .center-content { padding: 30px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;}
+        
+        .section-header-wrap { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px; }
+        .header-left h3 { font-size: 28px; color: var(--text-title); font-weight: normal; letter-spacing: 2px; margin-bottom: 5px; }
+        .header-left p { font-size: 12px; color: var(--text-dim); }
+        .header-right { display: flex; flex-direction: column; gap: 5px; text-align: right; }
+        .header-right .info-line { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-main); justify-content: flex-end;}
+        .header-right .info-line i { color: var(--text-dim); }
+
+        .status-bar { 
+            display: flex; align-items: center; gap: 10px; padding: 12px 20px;
+            background: rgba(212, 184, 134, 0.05); border: 1px solid var(--border-normal);
+            color: var(--highlight); font-size: 14px; letter-spacing: 1px;
+        }
+        
+        /* 技能网格 (4列) */
+        .skills-grid { 
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; 
+            align-items: start;
+        }
+        
+        .attr-col { display: flex; flex-direction: column; gap: 15px; }
+        
+        .skill-group { 
+            border: 1px solid var(--border-normal); background: var(--bg-card); 
+            display: flex; flex-direction: column;
+        }
+        .group-header { 
+            padding: 10px 15px; border-bottom: 1px solid var(--border-dim); 
+            display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.5);
+            font-size: 13px; color: var(--text-main);
+        }
+        .group-header i { color: var(--text-dim); font-size: 14px; width: 16px; text-align: center;}
+        .group-header .en { font-family: var(--font-en); color: var(--text-dim); font-size: 12px; margin-left: auto;}
+
+        .skill-list-inner { display: flex; flex-direction: column; }
+        
+        .skill-row { 
+            padding: 12px 15px; display: flex; align-items: center; gap: 10px; 
+            border-bottom: 1px solid var(--border-dim); cursor: pointer; transition: 0.2s;
+            position: relative; overflow: hidden;
+        }
+        .skill-row:last-child { border-bottom: none; }
+        .skill-row:hover:not(.locked) { background: rgba(212, 184, 134, 0.05); }
+        
+        .skill-row i.status-icon { font-size: 14px; color: var(--text-dark); width: 14px; text-align: center; z-index: 2;}
+        .skill-row .name { font-size: 13px; color: var(--text-dim); z-index: 2; display: flex; align-items: center; gap: 5px;}
+        .skill-row .name .en { font-family: var(--font-en); font-size: 11px; opacity: 0.6; }
+        
+        /* 技能标签 */
+        .tag { font-size: 10px; padding: 2px 6px; border-radius: 2px; border: 1px solid; margin-left: auto; z-index: 2;}
+        .tag.proficient { color: var(--highlight); border-color: var(--highlight); background: rgba(212,184,134,0.1); }
+        .tag.bg-provided { color: var(--text-dim); border-color: var(--border-normal); background: rgba(0,0,0,0.5); }
+
+        /* 选中状态 */
+        .skill-row.active { border-left: 2px solid var(--highlight); background: linear-gradient(90deg, rgba(212,184,134,0.1) 0%, transparent 100%);}
+        .skill-row.active i.status-icon { color: var(--highlight); }
+        .skill-row.active .name { color: var(--text-main); }
+        .skill-row.active .name .en { opacity: 0.8; color: var(--highlight); }
+
+        /* 锁定状态 (背景提供) */
+        .skill-row.locked { cursor: not-allowed; background: rgba(0,0,0,0.6); }
+        .skill-row.locked i.status-icon { color: var(--border-gold); }
+        .skill-row.locked .name { color: var(--text-main); }
+        .skill-row.locked::after { 
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.2) 20px);
+            z-index: 1; pointer-events: none;
+        }
+
+        .final-summary-box { 
+            margin-top: 10px; border: 1px dashed var(--border-normal); padding: 20px; 
+            background: rgba(0,0,0,0.3); position: relative;
+        }
+        .final-summary-box .title { 
+            position: absolute; top: -10px; left: 15px; background: var(--bg-panel); 
+            padding: 0 10px; font-size: 12px; color: var(--text-dim); 
+        }
+        .final-skills-list { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;}
+        .final-skill-badge { 
+            display: flex; align-items: center; gap: 8px; padding: 6px 12px; 
+            border: 1px solid var(--border-dim); background: var(--bg-card);
+            font-size: 12px; color: var(--text-main);
+        }
+        .final-skill-badge i { color: var(--highlight); font-size: 12px; }
+        .final-skill-badge .en { font-family: var(--font-en); color: var(--text-dim); font-size: 10px; }
+
+        .formula-note { 
+            text-align: center; font-size: 11px; color: var(--text-dark); 
+            margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+
+        .right-panel { display: flex; flex-direction: column; gap: 15px; }
+        
+        .preview-card { 
+            background: var(--bg-panel); border: 1px solid var(--border-normal); 
+            border-radius: 4px; padding: 25px; flex: 1; display: flex; flex-direction: column;
+            position: relative; overflow-y: auto; box-shadow: inset 0 0 30px rgba(0,0,0,0.5);
+        }
+
+        .preview-title { font-size: 20px; color: var(--text-title); text-align: center; letter-spacing: 1px; margin-bottom: 5px; }
+        .preview-subtitle { font-size: 12px; color: var(--text-dim); text-align: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-dim); padding-bottom: 15px;}
+
+        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px;}
+        .info-table td { padding: 6px 0; border-bottom: 1px solid rgba(42, 34, 24, 0.5); }
+        .info-table td:nth-child(1) { color: var(--text-dim); width: 40%; }
+        .info-table td:nth-child(2) { color: var(--text-main); font-family: var(--font-en); text-align: right; }
+        
+        .info-table .highlight td { color: var(--highlight); border-bottom-color: var(--border-dim); padding-top: 10px;}
+
+        .skills-preview-title { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; border-bottom: 1px solid var(--border-dim); padding-bottom: 5px;}
+        .skill-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
+        .skill-item { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-main); align-items: center;}
+        .skill-item .label { display: flex; align-items: center; gap: 6px; }
+        .skill-item i { font-size: 10px; color: var(--border-gold); width: 12px; text-align: center; }
+        .skill-item .en { font-family: var(--font-en); color: var(--text-dim); font-size: 10px; }
+        .skill-item .val { font-family: var(--font-en); color: var(--text-main); font-size: 14px;}
+
+        .prof-bonus-note { font-size: 12px; color: var(--text-dim); text-align: center; border: 1px solid var(--border-dim); padding: 8px; margin-bottom: 20px; font-family: var(--font-en);}
+
+        .btn-primary {
+            background: linear-gradient(180deg, rgba(212,184,134,0.1) 0%, rgba(0,0,0,0.8) 100%);
+            border: 1px solid var(--border-glow); color: var(--highlight);
+            padding: 15px; font-size: 16px; display: flex; justify-content: center; align-items: center; gap: 10px;
+            cursor: pointer; box-shadow: 0 0 15px rgba(212, 184, 134, 0.2);
+            transition: 0.3s; text-shadow: 0 0 5px rgba(212, 184, 134, 0.5);
+            margin-top: auto; letter-spacing: 1px;
+        }
+        .btn-primary:hover { box-shadow: 0 0 25px rgba(212, 184, 134, 0.4); background: rgba(212,184,134,0.1); }
+        
+        .btn-text { text-align: center; color: var(--text-dim); font-size: 13px; margin-top: 15px; cursor: pointer; }
+        .btn-text:hover { color: var(--text-main); }
+
+    </style>
+</head>
+<body>
+
+    <header class="navbar">
+        <div class="logo-area">
+            <i class="fa-solid fa-cube icon"></i>
+            <div>
+                <h1>StoryForge</h1>
+                <span>灵 境 档 案</span>
+            </div>
+        </div>
+        <nav class="nav-links">
+            <a href="#">大厅</a>
+            <a href="#">世界观</a>
+            <a href="#">档案</a>
+            <a href="#" class="active">角色</a>
+        </nav>
+        <div class="user-area">
+            <div class="user-info">
+                <div class="name">夜行者</div>
+                <div class="level">Lv.12</div>
+            </div>
+            <div class="avatar-small"></div>
+            <button class="icon-btn"><i class="fa-regular fa-envelope"></i></button>
+            <button class="icon-btn"><i class="fa-solid fa-gear"></i></button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        
+        <aside class="left-panel">
+            <div class="page-title">
+                <h2>角色创建</h2>
+                <div class="en-title">CHARACTER CREATE</div>
+            </div>
+            <div class="page-desc">为「追捕克仑可 Krenko's Way」创建 D&D 5e 冒险者</div>
+
+            <div class="step-list">
+                <!-- 步骤1: 基础设定 (已完成) -->
+                <div class="step-item completed">
+                    <span class="num">01</span><span class="text">基础设定</span>
+                    <i class="fa-solid fa-check icon"></i>
+                </div>
+                <!-- 步骤2: 分配属性 (已完成) -->
+                <div class="step-item completed">
+                    <span class="num">02</span><span class="text">分配属性</span>
+                    <i class="fa-solid fa-check icon"></i>
+                </div>
+                <!-- 步骤3: 选择技能 (进行中) -->
+                <div class="step-item active">
+                    <span class="num">03</span><span class="text">选择技能</span>
+                </div>
+            </div>
+
+            <div class="left-actions">
+                <button class="btn-outline"><i class="fa-solid fa-arrow-left"></i> 返回上一步</button>
+                <button class="btn-outline"><i class="fa-regular fa-floppy-disk"></i> 保存草稿</button>
+            </div>
+        </aside>
+
+        <main class="center-panel">
+            
+            <div class="char-summary-top">
+                <i class="fa-solid fa-user-ninja" style="color:var(--border-gold);"></i>
+                <span class="cn-name">艾琳 / Eileen</span>
+                <i class="fa-solid fa-circle"></i> <span>High Elf</span>
+                <i class="fa-solid fa-circle"></i> <span>Rogue</span>
+                <i class="fa-solid fa-circle"></i> <span>Criminal</span>
+                <i class="fa-solid fa-circle"></i> <span>Lv.1</span>
+            </div>
+
+            <div class="center-content">
+                
+                <div class="section-header-wrap">
+                    <div class="header-left">
+                        <h3>选择技能</h3>
+                        <p>根据职业与背景，选择你的 D&D 5e 技能熟练项</p>
+                    </div>
+                    <div class="header-right">
+                        <div class="info-line"><i class="fa-solid fa-hammer"></i> 游荡者职业：从以下技能中选择 4 项熟练</div>
+                        <div class="info-line"><i class="fa-solid fa-mask"></i> 背景 Criminal 自动提供：欺瞒 Deception、隐匿 Stealth</div>
+                    </div>
+                </div>
+
+                <div class="status-bar">
+                    <i class="fa-regular fa-circle-check"></i> 已选择职业技能 4 / 4
+                </div>
+
+                <!-- 技能瀑布流网格 (4列布局) -->
+                <div class="skills-grid">
+                    
+                    <!-- 列1: STR + DEX -->
+                    <div class="attr-col">
+                        <!-- STR 技能 -->
+                        <div class="skill-group">
+                            <div class="group-header"><i class="fa-solid fa-hand-fist"></i> 力量 <span class="en">STR</span></div>
+                            <div class="skill-list-inner">
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">运动 <span class="en">Athletics</span></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- DEX 技能 -->
+                        <div class="skill-group">
+                            <div class="group-header"><i class="fa-solid fa-feather-pointed"></i> 敏捷 <span class="en">DEX</span></div>
+                            <div class="skill-list-inner">
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">杂技 <span class="en">Acrobatics</span></div>
+                                </div>
+                                <div class="skill-row active">
+                                    <i class="fa-solid fa-circle-check status-icon"></i>
+                                    <div class="name">巧手 <span class="en">Sleight of Hand</span></div>
+                                    <span class="tag proficient">熟练</span>
+                                </div>
+                                <div class="skill-row locked">
+                                    <i class="fa-solid fa-lock status-icon"></i>
+                                    <div class="name">隐匿 <span class="en">Stealth</span></div>
+                                    <span class="tag bg-provided">背景提供</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 列2: INT -->
+                    <div class="attr-col">
+                        <div class="skill-group">
+                            <div class="group-header"><i class="fa-solid fa-book-open"></i> 智力 <span class="en">INT</span></div>
+                            <div class="skill-list-inner">
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">奥秘 <span class="en">Arcana</span></div>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">历史 <span class="en">History</span></div>
+                                </div>
+                                <div class="skill-row active">
+                                    <i class="fa-solid fa-circle-check status-icon"></i>
+                                    <div class="name">调查 <span class="en">Investigation</span></div>
+                                    <span class="tag proficient">熟练</span>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">自然 <span class="en">Nature</span></div>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">宗教 <span class="en">Religion</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 列3: WIS -->
+                    <div class="attr-col">
+                        <div class="skill-group">
+                            <div class="group-header"><i class="fa-solid fa-eye"></i> 感知 <span class="en">WIS</span></div>
+                            <div class="skill-list-inner">
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">动物驯养 <span class="en">Animal Handling</span></div>
+                                </div>
+                                <div class="skill-row active">
+                                    <i class="fa-solid fa-circle-check status-icon"></i>
+                                    <div class="name">洞悉 <span class="en">Insight</span></div>
+                                    <span class="tag proficient">熟练</span>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">医药 <span class="en">Medicine</span></div>
+                                </div>
+                                <div class="skill-row active">
+                                    <i class="fa-solid fa-circle-check status-icon"></i>
+                                    <div class="name">察觉 <span class="en">Perception</span></div>
+                                    <span class="tag proficient">熟练</span>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">生存 <span class="en">Survival</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 列4: CHA -->
+                    <div class="attr-col">
+                        <div class="skill-group">
+                            <div class="group-header"><i class="fa-solid fa-masks-theater"></i> 魅力 <span class="en">CHA</span></div>
+                            <div class="skill-list-inner">
+                                <div class="skill-row locked">
+                                    <i class="fa-solid fa-lock status-icon"></i>
+                                    <div class="name">欺瞒 <span class="en">Deception</span></div>
+                                    <span class="tag bg-provided">背景提供</span>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">威吓 <span class="en">Intimidation</span></div>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">表演 <span class="en">Performance</span></div>
+                                </div>
+                                <div class="skill-row">
+                                    <i class="fa-regular fa-circle status-icon"></i>
+                                    <div class="name">游说 <span class="en">Persuasion</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="final-summary-box">
+                    <div class="title">最终熟练技能</div>
+                    <div class="final-skills-list">
+                        <div class="final-skill-badge"><i class="fa-solid fa-mask"></i> 欺瞒 <span class="en">Deception</span> <span class="tag bg-provided" style="border:none;">背景</span></div>
+                        <div class="final-skill-badge"><i class="fa-solid fa-eye-low-vision"></i> 隐匿 <span class="en">Stealth</span> <span class="tag bg-provided" style="border:none;">背景</span></div>
+                        <div class="final-skill-badge"><i class="fa-solid fa-magnifying-glass"></i> 调查 <span class="en">Investigation</span> <span class="tag proficient" style="border:none;">熟练</span></div>
+                        <div class="final-skill-badge"><i class="fa-solid fa-eye"></i> 察觉 <span class="en">Perception</span> <span class="tag proficient" style="border:none;">熟练</span></div>
+                        <div class="final-skill-badge"><i class="fa-solid fa-lightbulb"></i> 洞悉 <span class="en">Insight</span> <span class="tag proficient" style="border:none;">熟练</span></div>
+                        <div class="final-skill-badge"><i class="fa-solid fa-hand-sparkles"></i> 巧手 <span class="en">Sleight of Hand</span> <span class="tag proficient" style="border:none;">熟练</span></div>
+                    </div>
+                </div>
+                
+                <div class="formula-note">
+                    <i class="fa-solid fa-circle-info"></i> 技能加值 = 属性修正值 + 熟练加值 (若熟练)
+                </div>
+
+            </div>
+        </main>
+
+        <aside class="right-panel">
+            <div class="preview-card">
+                
+                <div class="preview-title">实时规则预览</div>
+                <div class="preview-subtitle">根据当前选择自动计算</div>
+
+                <table class="info-table">
+                    <tr><td>等级</td><td>Lv.1</td></tr>
+                    <tr><td>种族</td><td>High Elf</td></tr>
+                    <tr><td>职业</td><td>Rogue</td></tr>
+                    <tr><td>背景</td><td>Criminal</td></tr>
+                    <tr class="highlight"><td>熟练加值</td><td>+2</td></tr>
+                </table>
+
+                <table class="info-table">
+                    <tr><td>生命骰</td><td>d8</td></tr>
+                    <tr><td>最大生命值</td><td>9</td></tr>
+                    <tr><td>当前生命值</td><td>9 / 9</td></tr>
+                    <tr><td>速度</td><td>30 ft</td></tr>
+                </table>
+
+                <table class="info-table">
+                    <tr><td>护甲等级 AC</td><td>待装备计算</td></tr>
+                    <tr><td>被动察觉</td><td>13</td></tr>
+                    <tr><td>豁免熟练</td><td>DEX, INT</td></tr>
+                </table>
+
+                <div class="skills-preview-title">技能预览 (熟练)</div>
+                <div class="skill-list">
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-eye-low-vision"></i> 隐匿 <span class="en">Stealth</span></span>
+                        <span class="val">+5</span>
+                    </div>
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-mask"></i> 欺瞒 <span class="en">Deception</span></span>
+                        <span class="val">+2</span>
+                    </div>
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-magnifying-glass"></i> 调查 <span class="en">Investigation</span></span>
+                        <span class="val">+4</span>
+                    </div>
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-eye"></i> 察觉 <span class="en">Perception</span></span>
+                        <span class="val">+3</span>
+                    </div>
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-lightbulb"></i> 洞悉 <span class="en">Insight</span></span>
+                        <span class="val">+3</span>
+                    </div>
+                    <div class="skill-item">
+                        <span class="label"><i class="fa-solid fa-hand-sparkles"></i> 巧手 <span class="en">Sleight of Hand</span></span>
+                        <span class="val">+5</span>
+                    </div>
+                </div>
+
+                <div class="prof-bonus-note">Proficiency Bonus = +2</div>
+
+                <!-- 第3步已经是最后一步，按钮变为完成创建 -->
+                <button class="btn-primary">
+                    完成创建：保存角色 <i class="fa-solid fa-check-double" style="margin-left:auto;"></i>
+                </button>
+                <div class="btn-text">返回大厅</div>
+            </div>
+        </aside>
+
+    </div>
+</body>
+</html>

@@ -1,5 +1,12 @@
-﻿<script setup>
-import { ref } from 'vue'
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { worldsApi } from './api/client'
+import lobbyBackground from '../背景/大厅界面.png'
+import productIcon from '../图标/产品图标.png'
+import goblinCover from '../游戏种类/哥布林.jpg'
+import dndCover from '../游戏种类/龙与地下城.jpg'
+import cocCover from '../游戏种类/克苏鲁.jpg'
+import customCover from '../游戏种类/世界观.jpg'
 
 const emit = defineEmits(['navigate'])
 
@@ -14,312 +21,382 @@ const searchKeyword = ref('')
 const activeNav = ref(props.currentPage)
 const selectedWorldview = ref(0)
 
-const worldviews = [
+const navItems = ['大厅', '世界观', '档案', '角色', '商城']
+
+const fallbackWorldviews = [
   {
     id: 1,
     title: '龙与地下城 DND',
-    tags: ['奇幻', '冒险'],
-    description: '主值世界观，适合新手入门与多人长期跑团。',
-    cover: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=fantasy%20dragon%20and%20knights%20medieval%20castle%20dungeons%20and%20dragons%20dark%20fantasy%20epic&image_size=landscape_16_9',
-    icon: '🐉',
-    recommendedModule: '追捕克仑可 Krenko\'s Way',
+    shortTitle: 'DND',
+    subtitle: '主推世界观，适合新手入门与多人长期跑团。',
+    tags: ['奇幻', '冒险', '高自由度'],
+    description: '从城堡、地下城到巨龙阴影，适合长期剧情推进与团队成长。',
+    cover: dndCover,
+    recommendedModule: '追捕克伦可 Krenko’s Way',
     modules: [
-      { name: '追捕克仑可 Krenko\'s Way', players: '4-6人', time: '3-5小时', type: '冒险' },
-      { name: '失落矿洞的秘密', players: '4-6人', time: '2-3小时', type: '冒险' },
-      { name: '龙息之城的阴影', players: '4-6人', time: '3-5小时', type: '冒险' }
+      {
+        name: '追捕克伦可 Krenko’s Way',
+        players: '4-6 人',
+        time: '8-12 小时',
+        type: '冒险',
+        summary: '地下帮派首领克伦可越狱逃亡，玩家受命追捕。',
+        cover: goblinCover
+      },
+      {
+        name: '失落矿洞的秘密',
+        players: '3-5 人',
+        time: '6-10 小时',
+        type: '冒险',
+        summary: '古老矿洞深处隐藏着矮人与龙的失落遗迹。',
+        cover: lobbyBackground
+      },
+      {
+        name: '龙息之城的阴影',
+        players: '4-6 人',
+        time: '8-12 小时',
+        type: '史诗',
+        summary: '王城在夜幕下动荡不安，旧誓与龙息一同苏醒。',
+        cover: dndCover
+      }
     ]
   },
   {
     id: 2,
     title: 'COC 7th',
+    shortTitle: 'COC 7th',
+    subtitle: '调查、悬疑与不可名状。',
     tags: ['调查', '悬疑', '恐怖'],
-    description: '克苏鲁神话世界观，揭开不可名状的真相。',
-    cover: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cthulhu%20mythos%20dark%20horror%20investigation%20mysterious%20ancient%20ruins%20tentacles%20lovecraftian&image_size=landscape_16_9',
-    icon: '🔱',
+    description: '旧日阴影缓慢逼近，适合偏推理、心理压力和氛围感团本。',
+    cover: cocCover,
     recommendedModule: '捕梦 / 双盲 / 慢慢',
     modules: [
-      { name: '捕梦者', players: '3-5人', time: '3-4小时', type: '悬疑' },
-      { name: '双盲', players: '4-6人', time: '4-6小时', type: '恐怖' },
-      { name: '慢慢', players: '4-6人', time: '3-5小时', type: '惊悚' }
+      {
+        name: '捕梦者',
+        players: '3-5 人',
+        time: '3-4 小时',
+        type: '悬疑',
+        summary: '梦境与现实边界逐渐瓦解，调查员开始怀疑自我。',
+        cover: cocCover
+      },
+      {
+        name: '双盲',
+        players: '4-6 人',
+        time: '4-6 小时',
+        type: '恐怖',
+        summary: '普通的学术委托背后，是组织与神话生物的双重骗局。',
+        cover: cocCover
+      }
     ]
   },
   {
     id: 3,
     title: '自定义世界观',
+    shortTitle: '自定义',
+    subtitle: '原创规则与世界自由搭建。',
     tags: ['原创', '自由', '自定义规则'],
-    description: '打造属于你的世界与规则体系，开启无限可能的冒险。',
-    cover: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=custom%20fantasy%20world%20creation%20magic%20orb%20mystical%20library%20scrolls%20endless%20possibilities&image_size=landscape_16_9',
-    icon: '✨',
-    recommendedModule: '',
-    modules: []
+    description: '你来定义地图、势力、规则和冲突，AI 按设定持续展开世界。',
+    cover: customCover,
+    recommendedModule: '从设定开始',
+    modules: [
+      {
+        name: '从一页设定出发',
+        players: '2-6 人',
+        time: '自由',
+        type: '原创',
+        summary: '从地图、神秘学体系和势力关系开始构建你的世界。',
+        cover: customCover
+      }
+    ]
   }
 ]
+
+const backendWorldIdByKind = ref({})
+const isLoadingWorldviews = ref(false)
+const worldviewsError = ref('')
+
+const classifyPresetWorldview = (worldview) => {
+  if (worldview.title.includes('DND')) return 'dnd'
+  if (worldview.title.includes('COC')) return 'coc'
+  return 'custom'
+}
+
+const classifyBackendWorld = (world) => {
+  const text = `${world.name || ''} ${world.type || ''}`.toLowerCase()
+  if (/dnd|krenko|dragon|龙|克伦可/.test(text)) return 'dnd'
+  if (/coc|古堡|悬疑|mystery/.test(text)) return 'coc'
+  if (/custom|自定义/.test(text)) return 'custom'
+  return null
+}
+
+const worldviews = computed(() => fallbackWorldviews.map((worldview) => {
+  const kind = classifyPresetWorldview(worldview)
+  const backendId = backendWorldIdByKind.value[kind]
+
+  return {
+    ...worldview,
+    source: 'preset',
+    backendId,
+    modules: (worldview.modules || []).map((module) => ({
+      ...module,
+      worldId: backendId
+    }))
+  }
+}))
+
+const selectedData = computed(() => worldviews.value[selectedWorldview.value] || worldviews.value[0])
+
+const filteredWorldviews = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return worldviews.value
+
+  return worldviews.value.filter((worldview) => {
+    const haystack = [
+      worldview.title,
+      worldview.subtitle,
+      worldview.description,
+      worldview.tags.join(' '),
+      worldview.modules.map((module) => module.name).join(' ')
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(keyword)
+  })
+})
+
+const selectedModules = computed(() => selectedData.value.modules || [])
 
 const handleNavigate = (page) => {
   activeNav.value = page
   emit('navigate', page)
 }
 
-const handleSearch = () => {
-  console.log('搜索世界观:', searchKeyword.value)
-}
-
-const selectWorldview = (index) => {
-  selectedWorldview.value = index
-}
-
-const enterWorldview = (index) => {
-  if (index !== undefined) {
+const selectWorldview = (worldviewId) => {
+  const index = worldviews.value.findIndex((item) => item.id === worldviewId)
+  if (index >= 0) {
     selectedWorldview.value = index
   }
-  const worldview = worldviews[selectedWorldview.value]
-  emit('navigate', '角色', worldview)
+}
+
+const enterWorldview = () => {
+  emit('navigate', '角色', selectedData.value)
 }
 
 const enterModule = (module) => {
-  console.log('进入模组:', module)
+  emit('navigate', '角色', {
+    ...selectedData.value,
+    selectedModule: module,
+    backendId: module.worldId || selectedData.value.backendId
+  })
 }
 
-const handleCreateCustom = () => {
-  console.log('开始创建自定义世界观')
-}
+onMounted(async () => {
+  isLoadingWorldviews.value = true
+  worldviewsError.value = ''
+
+  try {
+    const worlds = await worldsApi.list()
+    backendWorldIdByKind.value = worlds.reduce((result, world) => {
+      const kind = classifyBackendWorld(world)
+      if (kind && !result[kind]) {
+        result[kind] = world.id
+      }
+      return result
+    }, {})
+  } catch (error) {
+    worldviewsError.value = error?.message || '世界观列表读取失败，已使用本地预设。'
+  } finally {
+    isLoadingWorldviews.value = false
+  }
+})
 </script>
 
 <template>
   <div class="worldview-page">
-    <div class="page-bg">
-      <div class="bg-overlay"></div>
+    <div class="page-background">
+      <img class="page-image" :src="lobbyBackground" alt="世界观背景" />
+      <div class="bg-shadow"></div>
+      <div class="bg-focus"></div>
+      <div class="bg-grid"></div>
     </div>
 
     <nav class="navbar">
       <div class="nav-logo">
-        <svg viewBox="0 0 32 32" fill="none" class="logo-icon">
-          <polygon points="16,2 28,10 28,22 16,30 4,22 4,10" fill="#f5b95b"/>
-          <polygon points="16,4 26,10 26,22 16,28 6,22 6,10" fill="#d49a3f"/>
-          <circle cx="16" cy="16" r="4" fill="#1a1a2e"/>
-          <text x="16" y="19" text-anchor="middle" fill="#f5b95b" font-size="8" font-weight="bold">SF</text>
-        </svg>
+        <img class="logo-icon" :src="productIcon" alt="StoryForge 产品图标" />
         <div class="logo-text">
           <span class="logo-en">StoryForge</span>
           <span class="logo-cn">灵境档案</span>
         </div>
       </div>
+
       <div class="nav-menu">
         <button
+          v-for="item in navItems"
+          :key="item"
           class="nav-item"
-          :class="{ active: activeNav === '大厅' }"
-          @click="handleNavigate('大厅')"
+          :class="{ active: activeNav === item }"
+          @click="handleNavigate(item)"
         >
-          大厅
-        </button>
-        <button
-          class="nav-item"
-          :class="{ active: activeNav === '世界观' }"
-          @click="handleNavigate('世界观')"
-        >
-          世界观
-        </button>
-        <button
-          class="nav-item"
-          :class="{ active: activeNav === '档案' }"
-          @click="handleNavigate('档案')"
-        >
-          档案
+          {{ item }}
         </button>
       </div>
+
       <div class="nav-user">
-        <div class="user-avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+        <div class="user-chip">
+          <div class="user-avatar">夜</div>
+          <div class="user-info">
+            <span class="user-name">夜行者</span>
+            <span class="user-level">Lv.12</span>
+          </div>
         </div>
-        <div class="user-info">
-          <span class="user-name">夜行者</span>
-          <span class="user-level">Lv.12</span>
-        </div>
-        <button class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+        <button class="nav-icon" aria-label="消息">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M4 6h16v12H4z" />
+            <path d="m4 7 8 6 8-6" />
           </svg>
         </button>
-        <button class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+        <button class="nav-icon" aria-label="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.82l.05.06a2 2 0 1 1-2.83 2.83l-.06-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.52 1.7 1.7 0 0 0-1.9.36l-.06.05a2 2 0 1 1-2.83-2.83l.05-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1H3a2 2 0 1 1 0-4h.08A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.82l-.05-.06a2 2 0 1 1 2.83-2.83l.06.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.52V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.52 1.7 1.7 0 0 0 1.9-.36l.06-.05a2 2 0 1 1 2.83 2.83l-.05.06A1.7 1.7 0 0 0 19.4 9c.14.47.66.8 1.15.8H21a2 2 0 1 1 0 4h-.45c-.49 0-1.01.33-1.15.8Z" />
           </svg>
         </button>
       </div>
     </nav>
 
-    <main class="main-content">
-      <section class="hero-section">
-        <div class="hero-header">
-          <div class="hero-top-row">
-            <div class="title-wrap">
-              <span class="decor-line"></span>
-              <h1 class="hero-title">世界观馆</h1>
-              <span class="decor-line"></span>
-            </div>
-            <div class="search-section">
-              <div class="search-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="search-icon">
-                  <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                <input
-                  v-model="searchKeyword"
-                  type="text"
-                  class="search-input"
-                  placeholder="搜索世界观或模组..."
-                  @keyup.enter="handleSearch"
-                />
-              </div>
-              <button class="filter-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                  <polyline points="6 10 12 14 18 10"/>
-                  <line x1="12" y1="20" x2="12" y2="14"/>
-                </svg>
-                筛选
-              </button>
-              <button class="layout-toggle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <rect x="3" y="3" width="7" height="7"/>
-                  <rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/>
-                  <rect x="3" y="14" width="7" height="7"/>
-                </svg>
-              </button>
-            </div>
+    <main class="worldview-shell">
+      <section class="top-stage">
+        <div class="hero-copy">
+          <div class="title-row">
+            <span></span>
+            <p>WORLDVIEW GALLERY</p>
           </div>
-          <p class="hero-desc">先选择世界观，再进入对应模组展开跑团冒险。</p>
-          <p class="hero-hint">世界观不是剧本，模组属于世界观之下。</p>
+          <h1>世界观馆</h1>
+          <p class="hero-description">
+            先选择世界观，再进入对应模组开启跑团冒险。
+          </p>
+          <p class="hero-note">世界观不是剧本，模组属于世界观之下。</p>
         </div>
 
-        <div class="worldview-grid">
-          <div class="worldview-main">
-            <div class="worldview-cards">
-              <div
-                v-for="(worldview, index) in worldviews"
-                :key="worldview.id"
-                class="worldview-card"
-                :class="{ active: selectedWorldview === index }"
-                @click="selectWorldview(index)"
+        <div class="search-panel">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+            </svg>
+            <input
+              v-model="searchKeyword"
+              type="text"
+              placeholder="搜索世界观或模组..."
+            />
+          </div>
+          <button class="filter-btn">筛选</button>
+          <button class="grid-btn" aria-label="切换布局">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="4" y="4" width="6" height="6" />
+              <rect x="14" y="4" width="6" height="6" />
+              <rect x="4" y="14" width="6" height="6" />
+              <rect x="14" y="14" width="6" height="6" />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <div class="left-column">
+          <div class="worldview-cards">
+            <article
+              v-for="worldview in filteredWorldviews"
+              :key="worldview.id"
+              class="world-card"
+              :class="{ active: selectedData.id === worldview.id }"
+              @click="selectWorldview(worldview.id)"
+            >
+              <div class="card-image-wrap">
+                <img :src="worldview.cover" :alt="worldview.title" class="card-image" />
+                <div class="card-overlay"></div>
+                <div v-if="worldview.id === 1" class="card-badge">主推</div>
+              </div>
+              <div class="card-body">
+                <h3>{{ worldview.title }}</h3>
+                <div class="tag-row">
+                  <span v-for="tag in worldview.tags" :key="tag">{{ tag }}</span>
+                </div>
+                <p class="card-description">{{ worldview.subtitle }}</p>
+                <p class="card-module">推荐模组：{{ worldview.recommendedModule }}</p>
+                <button class="card-action" @click.stop="selectWorldview(worldview.id)">查看模组</button>
+              </div>
+            </article>
+          </div>
+
+          <section class="module-panel">
+            <div class="module-panel-head">
+              <div class="module-head-copy">
+                <img :src="productIcon" alt="" />
+                <h2>模组预览 · {{ selectedData.title }}</h2>
+              </div>
+              <button class="view-all-btn">查看全部</button>
+            </div>
+
+            <div class="module-list">
+              <article
+                v-for="(module, index) in selectedModules"
+                :key="module.name"
+                class="module-card"
+                @click="enterModule(module)"
               >
-                <div class="card-cover">
-                  <img :src="worldview.cover" :alt="worldview.title" class="cover-img" />
-                  <div class="cover-overlay"></div>
-                  <div v-if="index === 0" class="status-badge main">主推</div>
+                <div class="module-thumb">
+                  <img :src="module.cover" :alt="module.name" />
+                  <span v-if="index === 0" class="module-badge">推荐</span>
                 </div>
-                <div class="card-content">
-                  <h3 class="worldview-title">{{ worldview.title }}</h3>
-                  <div class="worldview-tags">
-                    <span
-                      v-for="(tag, tagIndex) in worldview.tags"
-                      :key="tagIndex"
-                      class="tag"
-                    >
-                      {{ tag }}
-                    </span>
+                <div class="module-content">
+                  <h3>{{ module.name }}</h3>
+                  <div class="module-meta">
+                    <span>{{ module.players }}</span>
+                    <span>{{ module.time }}</span>
+                    <span>{{ module.type }}</span>
                   </div>
-                  <p class="worldview-desc">{{ worldview.description }}</p>
-                  <div v-if="worldview.recommendedModule" class="recommend-line">
-                    <span class="recommend-label">推荐模组：</span>
-                    <span class="recommend-value">{{ worldview.recommendedModule }}</span>
-                  </div>
-                  <button class="card-btn" @click.stop="index === 2 ? handleCreateCustom() : enterWorldview(index)">
-                    {{ index === 2 ? '开始创建' : '进入世界观' }}
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
+                  <p>{{ module.summary }}</p>
                 </div>
-              </div>
+                <button class="module-enter">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </article>
             </div>
+          </section>
+        </div>
 
-            <div class="modules-preview">
-              <div class="preview-header">
-                <div class="title-wrap">
-                  <span class="decor-line small"></span>
-                  <h3 class="preview-title">模组预览 · {{ worldviews[selectedWorldview].title }}</h3>
-                  <span class="decor-line small"></span>
-                </div>
-                <span class="preview-hint">以下模组均属于当前选中世界观，可点击查看详情或直接进入</span>
-                <button class="view-all">查看全部</button>
-              </div>
-              <div class="modules-list">
-                <div
-                  v-for="(module, index) in worldviews[selectedWorldview].modules"
-                  :key="index"
-                  class="module-item"
-                  @click="enterModule(module)"
-                >
-                  <div class="module-cover">
-                    <img :src="worldviews[selectedWorldview].cover" :alt="module.name" class="module-img" />
-                    <div class="cover-overlay"></div>
-                    <span v-if="index === 0" class="recommend-badge">推荐</span>
-                  </div>
-                  <div class="module-info">
-                    <h4 class="module-name">{{ module.name }}</h4>
-                    <div class="module-meta">
-                      <span class="meta-item">{{ module.players }}</span>
-                      <span class="meta-item">{{ module.time }}</span>
-                      <span class="meta-item">{{ module.type }}</span>
-                    </div>
-                  </div>
-                  <button class="enter-btn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
+        <aside class="right-column">
+          <section class="intel-card">
+            <p class="intel-kicker">当前选中世界观</p>
+            <div class="selected-header">
+              <img :src="productIcon" alt="" />
+              <h2>{{ selectedData.title }}</h2>
             </div>
-          </div>
-
-          <div class="worldview-sidebar">
-            <div class="sidebar-card">
-              <div class="card-header">
-                <span class="header-icon">📜</span>
-                <h4 class="header-title">当前选中世界观</h4>
-              </div>
-              <div class="selected-info">
-                <div class="selected-detail">
-                  <h3 class="selected-title">{{ worldviews[selectedWorldview].title }}</h3>
-                  <p class="selected-desc">{{ worldviews[selectedWorldview].description }}</p>
+            <p class="intel-description">{{ selectedData.description }}</p>
+            <div class="intel-tags">
+              <span v-for="tag in selectedData.tags" :key="tag">{{ tag }}</span>
+            </div>
+            <div class="intel-divider"></div>
+            <p class="intel-kicker">推荐模组</p>
+            <div class="recommend-list">
+              <button
+                v-for="module in selectedModules"
+                :key="module.name"
+                class="recommend-item"
+                @click="enterModule(module)"
+              >
+                <img :src="module.cover" :alt="module.name" />
+                <div class="recommend-text">
+                  <strong>{{ module.name }}</strong>
+                  <span>{{ module.players }} · {{ module.time }}</span>
                 </div>
-              </div>
-              <div class="recommend-section">
-                <h5 class="section-title">推荐模组</h5>
-                <div class="recommend-list">
-                  <div
-                    v-for="(module, index) in worldviews[selectedWorldview].modules"
-                    :key="index"
-                    class="recommend-item"
-                    @click="enterModule(module)"
-                  >
-                    <div class="item-cover">
-                      <img :src="worldviews[selectedWorldview].cover" :alt="module.name" class="item-img" />
-                      <div class="cover-overlay"></div>
-                    </div>
-                    <div class="item-info">
-                      <span class="item-name">{{ module.name }}</span>
-                      <span class="item-meta">{{ module.players }} · {{ module.time }}</span>
-                    </div>
-                    <button class="recommend-btn">推荐</button>
-                  </div>
-                </div>
-              </div>
-              <button class="enter-worldview-btn" @click="enterWorldview()">
-                进入 {{ worldviews[selectedWorldview].title.replace(' DND', '') }} 世界观
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
               </button>
             </div>
-          </div>
-        </div>
+            <button class="primary-enter" @click="enterWorldview">进入 {{ selectedData.shortTitle }} 世界观</button>
+          </section>
+        </aside>
       </section>
     </main>
   </div>
@@ -327,49 +404,74 @@ const handleCreateCustom = () => {
 
 <style scoped>
 .worldview-page {
-  min-height: 100vh;
   position: relative;
-  background: #080a12;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #050607;
+  color: #f0e7d8;
 }
 
-.page-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url('/src/assets/auth-bg.png');
-  background-size: cover;
-  background-position: center;
-  z-index: 0;
-  opacity: 0.2;
-}
-
-.bg-overlay {
+.page-background,
+.bg-shadow,
+.bg-focus,
+.bg-grid {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
+}
+
+.page-image {
   width: 100%;
   height: 100%;
-  background: 
-    radial-gradient(ellipse at 50% 0%, rgba(201, 169, 98, 0.02) 0%, transparent 60%),
-    radial-gradient(ellipse at 30% 50%, rgba(139, 115, 85, 0.02) 0%, transparent 40%);
+  object-fit: cover;
+  object-position: 56% 21%;
+  filter: brightness(0.72) saturate(0.94);
+  transform: scale(1.03);
+}
+
+.bg-shadow {
+  background:
+    linear-gradient(90deg, rgba(4, 6, 11, 0.84) 0%, rgba(4, 7, 11, 0.74) 28%, rgba(4, 7, 11, 0.42) 56%, rgba(21, 11, 4, 0.76) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.56) 0%, transparent 22%, transparent 84%, rgba(0, 0, 0, 0.56) 100%);
+}
+
+.bg-focus {
+  background:
+    radial-gradient(circle at 59% 25%, rgba(95, 212, 255, 0.18), transparent 14%),
+    radial-gradient(circle at 83% 26%, rgba(255, 183, 72, 0.18), transparent 12%);
+  mix-blend-mode: screen;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 120px 120px;
+  opacity: 0.08;
 }
 
 .navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  display: flex;
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 40px;
-  background: rgba(26, 21, 16, 0.95);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(139, 115, 85, 0.2);
-  z-index: 100;
+  gap: 20px;
+  padding: 18px 34px 10px;
+  border-bottom: 1px solid rgba(221, 174, 94, 0.14);
+  background: linear-gradient(180deg, rgba(4, 4, 6, 0.88), rgba(4, 4, 6, 0.44));
+  backdrop-filter: blur(10px);
+}
+
+.navbar::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 92px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(248, 199, 99, 0.96), transparent);
+  box-shadow: 0 0 15px rgba(248, 199, 99, 0.45);
 }
 
 .nav-logo {
@@ -379,810 +481,588 @@ const handleCreateCustom = () => {
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(240, 190, 90, 0.18));
 }
 
 .logo-text {
   display: flex;
   flex-direction: column;
+  gap: 0;
+  line-height: 1.04;
 }
 
 .logo-en {
-  font-size: 16px;
-  font-weight: 700;
-  color: #c9a962;
-  letter-spacing: 1px;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  color: #efc26a;
 }
 
 .logo-cn {
-  font-size: 10px;
-  color: #a67c52;
-  letter-spacing: 2px;
-  font-family: 'KaiTi', 'STKaiti', serif;
+  margin-top: 2px;
+  font-size: 0.88rem;
+  letter-spacing: 0.26em;
+  color: rgba(241, 198, 108, 0.86);
 }
 
 .nav-menu {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
 }
 
 .nav-item {
-  padding: 10px 28px;
-  background: none;
-  border: none;
-  color: #8b7355;
-  font-size: 15px;
-  font-weight: 500;
+  position: relative;
+  padding: 8px 4px 14px;
+  border: 0;
+  background: transparent;
+  color: rgba(250, 226, 179, 0.8);
+  font-size: 1rem;
+  letter-spacing: 0.16em;
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  font-family: 'Georgia', 'Times New Roman', serif;
 }
 
+.nav-item.active,
 .nav-item:hover {
-  color: #c9a962;
-  background: rgba(139, 115, 85, 0.1);
+  color: #f6c56e;
 }
 
-.nav-item.active {
-  color: #c9a962;
-  background: rgba(201, 169, 98, 0.1);
-  border-bottom: 2px solid #c9a962;
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 72px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(247, 192, 88, 0.96), transparent);
+  box-shadow: 0 0 14px rgba(247, 192, 88, 0.5);
 }
 
 .nav-user {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 7px;
+  border: 1px solid rgba(237, 187, 93, 0.2);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(54, 34, 10, 0.45), rgba(11, 11, 14, 0.45));
 }
 
 .user-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  background: rgba(139, 115, 85, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(139, 115, 85, 0.6);
-}
-
-.user-avatar svg {
-  width: 22px;
-  height: 22px;
-  color: #8b7355;
+  border: 1px solid rgba(248, 196, 94, 0.34);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 222, 170, 0.28), transparent 26%),
+    linear-gradient(180deg, #3f2c12, #17100a);
+  color: #f7cc7d;
+  font-weight: 700;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: 2px;
 }
 
 .user-name {
-  font-size: 14px;
-  color: #f5efe6;
+  color: #f7d389;
   font-weight: 600;
 }
 
 .user-level {
-  padding: 2px 10px;
-  background: rgba(139, 115, 85, 0.2);
-  border: 1px solid rgba(139, 115, 85, 0.5);
-  border-radius: 12px;
-  font-size: 12px;
-  color: #8b7355;
-  font-weight: 600;
+  color: rgba(240, 222, 185, 0.76);
+  font-size: 0.84rem;
 }
 
 .nav-icon {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(139, 115, 85, 0.1);
-  border: none;
-  border-radius: 6px;
-  color: #8b7355;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.nav-icon:hover {
-  background: rgba(139, 115, 85, 0.2);
-  color: #c9a962;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(241, 191, 94, 0.22);
+  background: rgba(10, 11, 14, 0.55);
+  color: rgba(247, 205, 122, 0.88);
 }
 
 .nav-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
 }
 
-.main-content {
+.worldview-shell {
   position: relative;
-  z-index: 10;
-  padding-top: 80px;
-  padding-bottom: 60px;
-}
-
-.hero-section {
-  padding: 48px;
-  max-width: 1400px;
+  z-index: 2;
+  max-width: 1620px;
   margin: 0 auto;
+  padding: 18px 34px 22px;
+  display: grid;
+  gap: 16px;
 }
 
-.hero-header {
-  margin-bottom: 48px;
+.top-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 540px);
+  gap: 18px;
+  align-items: end;
 }
 
-.hero-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.hero-copy {
+  max-width: 620px;
 }
 
-.title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-
-.decor-line {
-  width: 120px;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, #8b7355, transparent);
-}
-
-.decor-line.small {
-  width: 60px;
-  height: 2px;
-}
-
-.hero-title {
-  font-size: 36px;
-  font-weight: 700;
-  color: #2d241a;
-  letter-spacing: 16px;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.hero-desc {
-  font-size: 15px;
-  color: #3d3024;
-  font-weight: 500;
-  margin-bottom: 8px;
-  margin-top: 16px;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.hero-hint {
-  font-size: 13px;
-  color: #6b5a45;
-}
-
-.search-section {
+.title-row {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 10px;
+}
+
+.title-row span {
+  width: 76px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 187, 88, 1), transparent);
+}
+
+.title-row p,
+.intel-kicker {
+  color: #f0d59d;
+  font-size: 0.9rem;
+  letter-spacing: 0.18em;
+}
+
+.hero-copy h1 {
+  font-size: clamp(3.4rem, 6vw, 5.6rem);
+  line-height: 0.94;
+  color: #f1cb82;
+}
+
+.hero-description {
+  margin-top: 12px;
+  max-width: 36ch;
+  color: rgba(242, 231, 216, 0.84);
+  font-size: 1.18rem;
+  line-height: 1.7;
+}
+
+.hero-note {
+  margin-top: 10px;
+  color: rgba(245, 208, 138, 0.82);
+}
+
+.search-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.search-box,
+.filter-btn,
+.grid-btn,
+.view-all-btn,
+.card-action,
+.primary-enter {
+  border: 1px solid rgba(245, 187, 88, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 12, 18, 0.62);
+  backdrop-filter: blur(10px);
+  color: #f3d49b;
 }
 
 .search-box {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 320px;
-  padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 4px;
+  gap: 10px;
+  padding: 14px 16px;
 }
 
-.search-icon {
-  width: 20px;
-  height: 20px;
-  color: #8b7355;
+.search-box svg {
+  width: 18px;
+  height: 18px;
+  color: rgba(240, 231, 216, 0.54);
 }
 
-.search-input {
-  flex: 1;
-  background: none;
+.search-box input {
+  width: 100%;
+  background: transparent;
   border: none;
   outline: none;
-  color: #2d241a;
-  font-size: 14px;
+  color: #f0e7d8;
 }
 
-.search-input::placeholder {
-  color: #a6957a;
+.search-box input::placeholder {
+  color: rgba(240, 231, 216, 0.36);
 }
 
-.filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  background: rgba(139, 115, 85, 0.1);
-  border: 1px solid rgba(139, 115, 85, 0.3);
-  border-radius: 4px;
-  color: #6b5a45;
-  font-size: 13px;
-  font-weight: 500;
+.filter-btn,
+.grid-btn {
+  min-height: 52px;
+  padding: 0 18px;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.filter-btn:hover {
-  background: rgba(139, 115, 85, 0.2);
-  border-color: #8b7355;
+.grid-btn {
+  width: 56px;
+  display: grid;
+  place-items: center;
 }
 
-.filter-btn svg {
-  width: 16px;
-  height: 16px;
+.grid-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
-.layout-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: rgba(245, 185, 91, 0.15);
-  border: 1px solid rgba(245, 185, 91, 0.3);
-  border-radius: 12px;
-  color: #f5b95b;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) 388px;
+  gap: 18px;
+  align-items: start;
 }
 
-.layout-toggle:hover {
-  background: rgba(245, 185, 91, 0.25);
-}
-
-.layout-toggle svg {
-  width: 20px;
-  height: 20px;
-}
-
-.worldview-grid {
-  display: flex;
-  gap: 32px;
-}
-
-.worldview-main {
-  flex: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
+.left-column {
+  display: grid;
+  gap: 16px;
 }
 
 .worldview-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 28px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.worldview-card {
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 4px;
+.world-card,
+.module-panel,
+.intel-card {
+  border: 1px solid rgba(245, 187, 88, 0.14);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(10, 14, 22, 0.82), rgba(8, 11, 18, 0.88));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.world-card {
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.4s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
 }
 
-.worldview-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(139, 115, 85, 0.4);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+.world-card:hover,
+.world-card.active {
+  transform: translateY(-4px);
+  border-color: rgba(245, 187, 88, 0.42);
 }
 
-.worldview-card.active {
-  border-color: #8b7355;
-  box-shadow: 0 4px 16px rgba(139, 115, 85, 0.15);
-}
-
-.card-cover {
+.card-image-wrap {
   position: relative;
-  height: 160px;
-  overflow: hidden;
+  height: 238px;
 }
 
-.cover-img {
+.card-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.cover-overlay {
+.card-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(180deg, rgba(245, 239, 230, 0) 0%, rgba(245, 239, 230, 0.7) 100%);
-  pointer-events: none;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 7, 12, 0.08), rgba(4, 7, 12, 0.76));
 }
 
-.status-badge {
+.card-badge,
+.module-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  padding: 4px 14px;
-  border-radius: 2px;
+  top: 14px;
+  left: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(245, 187, 88, 0.18);
+  border: 1px solid rgba(245, 187, 88, 0.42);
+  color: #f6d08a;
   font-size: 12px;
-  font-weight: 600;
-  z-index: 3;
 }
 
-.status-badge.main {
-  background: #2d241a;
-  color: #f5efe6;
-}
-
-.card-content {
+.card-body {
+  display: grid;
+  gap: 10px;
   padding: 18px;
 }
 
-.worldview-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #2d241a;
-  margin-bottom: 10px;
-  font-family: 'Georgia', 'Times New Roman', serif;
+.card-body h3,
+.module-content h3,
+.selected-header h2 {
+  color: #f2ead9;
+  font-size: 1.86rem;
 }
 
-.worldview-tags {
+.tag-row,
+.intel-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 8px;
 }
 
-.tag {
-  padding: 3px 10px;
-  background: rgba(139, 115, 85, 0.1);
-  border: 1px solid rgba(139, 115, 85, 0.25);
-  border-radius: 2px;
-  font-size: 11px;
-  color: #6b5a45;
+.tag-row span,
+.intel-tags span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(240, 231, 216, 0.76);
+  font-size: 12px;
 }
 
-.worldview-desc {
-  font-size: 13px;
-  color: #4a3d32;
-  line-height: 1.6;
-  margin-bottom: 14px;
+.card-description,
+.card-module,
+.intel-description,
+.module-content p,
+.recommend-text span {
+  color: rgba(240, 231, 216, 0.76);
+  line-height: 1.65;
 }
 
-.recommend-line {
-  font-size: 13px;
-  color: #6b5a45;
-  margin-bottom: 16px;
+.card-module {
+  color: rgba(245, 208, 138, 0.9);
 }
 
-.recommend-label {
-  color: #6b5a45;
+.card-action,
+.view-all-btn,
+.primary-enter {
+  min-height: 46px;
+  padding: 0 18px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.recommend-value {
-  color: #8b7355;
-  font-weight: 600;
+.module-panel {
+  padding: 18px;
 }
 
-.card-btn {
-  width: 100%;
+.module-panel-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  background: #2d241a;
-  border: 1px solid #4a3d32;
-  border-radius: 2px;
-  color: #f5efe6;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.card-btn:hover {
-  background: #3d3024;
-  border-color: #6b5a45;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+.module-head-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.card-btn svg {
+.module-head-copy img {
   width: 18px;
   height: 18px;
 }
 
-.modules-preview {
-  background: rgba(40, 45, 55, 0.95);
-  border: 1px solid rgba(245, 185, 91, 0.35);
-  border-radius: 16px;
-  padding: 28px;
+.module-head-copy h2 {
+  color: #f3d49b;
+  font-size: 1.36rem;
 }
 
-.preview-header {
-  display: flex;
+.module-list,
+.recommend-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.module-card {
+  display: grid;
+  grid-template-columns: 184px 1fr auto;
+  gap: 14px;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.preview-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: #f5b95b;
-  text-shadow: 0 0 20px rgba(245, 185, 91, 0.3);
-}
-
-.preview-hint {
-  flex: 1;
-  font-size: 13px;
-  color: #b0b7c3;
-  text-align: center;
-}
-
-.view-all {
-  padding: 10px 24px;
-  background: none;
-  border: 1px solid rgba(139, 115, 85, 0.3);
-  border-radius: 4px;
-  color: #6b5a45;
-  font-size: 14px;
-  font-weight: 500;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.view-all:hover {
-  background: rgba(139, 115, 85, 0.1);
-}
-
-.modules-list {
-  display: flex;
-  gap: 20px;
-}
-
-.module-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.15);
-  border-radius: 4px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.module-item:hover {
-  border-color: rgba(139, 115, 85, 0.35);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.module-cover {
+.module-thumb {
   position: relative;
-  height: 130px;
+  height: 106px;
+  border-radius: 14px;
   overflow: hidden;
 }
 
-.module-img {
+.module-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.recommend-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  padding: 3px 10px;
-  background: #2d241a;
-  border-radius: 2px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #f5efe6;
-  z-index: 2;
-}
-
-.module-info {
-  padding: 14px;
-  flex: 1;
-}
-
-.module-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #2d241a;
-  margin-bottom: 10px;
-  font-family: 'Georgia', 'Times New Roman', serif;
 }
 
 .module-meta {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 10px;
 }
 
-.meta-item {
+.module-meta span {
+  color: rgba(240, 231, 216, 0.62);
   font-size: 12px;
-  color: #6b5a45;
 }
 
-.enter-btn {
-  margin: 0 14px 14px;
-  padding: 10px;
-  background: rgba(139, 115, 85, 0.1);
-  border: 1px solid rgba(139, 115, 85, 0.3);
-  border-radius: 4px;
-  color: #6b5a45;
+.module-enter {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(245, 187, 88, 0.24);
+  border-radius: 50%;
+  background: rgba(245, 187, 88, 0.08);
+  color: #f6d08a;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.enter-btn:hover {
-  background: rgba(139, 115, 85, 0.2);
+.module-enter svg {
+  width: 18px;
+  height: 18px;
 }
 
-.enter-btn svg {
-  width: 16px;
-  height: 16px;
+.intel-card {
+  padding: 20px;
+  position: sticky;
+  top: 18px;
 }
 
-.worldview-sidebar {
-  flex: 1;
-}
-
-.sidebar-card {
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 4px;
-  padding: 22px;
-  height: fit-content;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.card-header {
+.selected-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(139, 115, 85, 0.15);
-}
-
-.header-icon {
-  font-size: 16px;
-  color: #8b7355;
-}
-
-.header-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #2d241a;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.selected-info {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 22px;
-  padding: 14px;
-  background: rgba(139, 115, 85, 0.06);
-  border-radius: 4px;
-  border: 1px solid rgba(139, 115, 85, 0.12);
-}
-
-.selected-detail {
-  flex: 1;
-}
-
-.selected-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #2d241a;
-  margin-bottom: 8px;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.selected-desc {
-  font-size: 13px;
-  color: #4a3d32;
-  line-height: 1.6;
-}
-
-.recommend-section {
-  margin-bottom: 24px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #3d3024;
-  margin-bottom: 14px;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.recommend-list {
-  display: flex;
-  flex-direction: column;
   gap: 12px;
+  margin-top: 10px;
+}
+
+.selected-header img {
+  width: 28px;
+  height: 28px;
+}
+
+.intel-description {
+  margin-top: 12px;
+}
+
+.intel-divider {
+  height: 1px;
+  margin: 18px 0;
+  background: linear-gradient(90deg, transparent, rgba(245, 187, 88, 0.34), transparent);
 }
 
 .recommend-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 12px;
   align-items: center;
-  gap: 14px;
-  padding: 12px;
-  background: rgba(139, 115, 85, 0.05);
-  border: 1px solid rgba(139, 115, 85, 0.12);
-  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.recommend-item:hover {
-  border-color: rgba(139, 115, 85, 0.3);
-  background: rgba(139, 115, 85, 0.08);
-}
-
-.item-cover {
-  width: 56px;
-  height: 56px;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.item-img {
-  width: 100%;
-  height: 100%;
+.recommend-item img {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
   object-fit: cover;
 }
 
-.item-info {
-  flex: 1;
+.recommend-text {
+  display: grid;
+  gap: 4px;
+  text-align: left;
 }
 
-.item-name {
-  display: block;
-  font-size: 14px;
-  color: #2d241a;
-  font-weight: 500;
-  margin-bottom: 4px;
+.recommend-text strong {
+  color: #f2ead9;
 }
 
-.item-meta {
-  font-size: 12px;
-  color: #6b5a45;
-}
-
-.recommend-btn {
-  padding: 6px 16px;
-  background: rgba(245, 185, 91, 0.2);
-  border: 1px solid rgba(245, 185, 91, 0.5);
-  border-radius: 8px;
-  color: #f5b95b;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.recommend-btn:hover {
-  background: rgba(245, 185, 91, 0.35);
-}
-
-.enter-worldview-btn {
+.primary-enter {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px;
-  background: linear-gradient(135deg, rgba(245, 185, 91, 0.35) 0%, rgba(212, 154, 63, 0.25) 100%);
-  border: 2px solid #f5b95b;
-  border-radius: 12px;
-  color: #f5b95b;
-  font-size: 16px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: all 0.3s ease;
+  margin-top: 16px;
 }
 
-.enter-worldview-btn:hover {
-  background: linear-gradient(135deg, rgba(245, 185, 91, 0.45) 0%, rgba(212, 154, 63, 0.35) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(245, 185, 91, 0.35);
-}
-
-.enter-worldview-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-@media (max-width: 1200px) {
-  .worldview-grid {
-    flex-direction: column;
+@media (max-width: 1280px) {
+  .content-grid {
+    grid-template-columns: 1fr;
   }
-  
-  .worldview-main {
-    flex: 1;
+
+  .intel-card {
+    position: static;
   }
-  
-  .worldview-sidebar {
-    flex: 1;
+}
+
+@media (max-width: 1100px) {
+  .top-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .worldview-cards {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 900px) {
-  .worldview-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .modules-list {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 768px) {
   .navbar {
-    padding: 0 16px;
-  }
-  
-  .nav-menu {
-    display: none;
-  }
-  
-  .hero-section {
-    padding: 28px 16px;
-  }
-  
-  .hero-title {
-    font-size: 36px;
-    letter-spacing: 16px;
-  }
-  
-  .search-section {
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .search-box {
-    max-width: 100%;
-  }
-  
-  .worldview-cards {
     grid-template-columns: 1fr;
-    gap: 24px;
+    justify-items: start;
+    gap: 16px;
+    padding: 18px 18px 12px;
   }
-  
-  .preview-header {
-    flex-wrap: wrap;
-  }
-  
-  .preview-hint {
+
+  .nav-menu {
     width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+    overflow-x: auto;
+  }
+
+  .nav-user {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .worldview-shell {
+    padding: 18px 18px 22px;
+  }
+
+  .search-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .module-card {
+    grid-template-columns: 1fr;
+  }
+
+  .module-thumb {
+    height: 150px;
   }
 }
 
-@media (max-width: 480px) {
-  .hero-title {
-    font-size: 32px;
-    letter-spacing: 12px;
+@media (max-width: 640px) {
+  .hero-copy h1 {
+    font-size: 3rem;
   }
-  
-  .card-cover {
-    height: 180px;
+
+  .module-panel-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

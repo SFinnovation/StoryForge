@@ -1,301 +1,467 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { charactersApi, sessionsApi, worldsApi } from './api/client'
+import JoinRoomModal from './JoinRoomModal.vue'
+import lobbyBackground from '../背景/大厅界面.png'
+import productIcon from '../图标/产品图标.png'
+import cubeIcon from '../图标/魔方.png'
+import gateIcon from '../图标/魔法门.png'
+import orbIcon from '../图标/魔法球.png'
+import archiveIcon from '../图标/档案.png'
+import goblinCover from '../游戏种类/哥布林.jpg'
 
 const props = defineProps({
   currentPage: {
     type: String,
     default: '大厅'
+  },
+  currentUser: {
+    type: Object,
+    default: null
   }
 })
 
-const emit = defineEmits(['navigate'])
+const emit = defineEmits(['navigate', 'session-created'])
 
 const showCreateModal = ref(false)
+const showJoinModal = ref(false)
 const roomCode = ref('')
 const activeNav = ref(props.currentPage)
+const worlds = ref([])
+const characters = ref([])
+const sessions = ref([])
+const apiStatus = ref('')
+const joinRoomError = ref('')
+const isSubmitting = ref(false)
 
 const createRoomForm = reactive({
-  roomName: '',
-  scriptTemplate: '',
+  roomName: '追捕克伦可团',
+  scriptTemplate: '追捕克伦可',
   maxPlayers: 4,
   roomType: 'public',
-  aiStyle: 'classic',
+  aiStyle: 'immersive',
   difficulty: 'normal'
 })
 
-const navItems = [
-  { name: '大厅' },
-  { name: '世界观' },
-  { name: '档案' }
-]
+const navItems = ['大厅', '世界观', '档案', '商城']
 
-const friendsList = [
-  { name: '说书人', level: 'Lv.8', status: 'online' },
-  { name: '云中君', level: 'Lv.15', status: 'online' },
-  { name: '潇湘客', level: 'Lv.6', status: 'online' },
-  { name: '墨染', level: 'Lv.10', status: 'offline' }
-]
-
-const quickRooms = [
+const actionCards = [
   {
-    name: '云泽佣兵团',
+    key: 'create',
+    title: '创建房间',
+    subtitle: '启封新卷',
+    icon: cubeIcon,
+    tone: 'gold'
+  },
+  {
+    key: 'join',
+    title: '加入房间',
+    subtitle: '输入卷宗编号',
+    icon: gateIcon,
+    tone: 'cyan'
+  },
+  {
+    key: 'continue',
+    title: '继续冒险',
+    subtitle: '续写旧卷',
+    icon: orbIcon,
+    tone: 'ember'
+  },
+  {
+    key: 'archive',
+    title: '历史档案',
+    subtitle: '查阅灵境卷宗',
+    icon: archiveIcon,
+    tone: 'steel'
+  }
+]
+
+const fallbackQuickRooms = [
+  {
+    name: '追捕克伦可团',
     players: '2/4',
     owner: '夜行者'
   },
   {
-    name: '洛水断镖小组',
+    name: '迷雾矿井先遣队',
     players: '3/4',
     owner: '说书人'
   }
 ]
 
-const lastAdventure = {
-  title: '山海志怪 · 雾泽铜铃',
-  chapter: '第3章 · 铜神回响',
-  progress: 68
+const fallbackLastAdventure = {
+  title: '追捕克伦可',
+  chapter: '第 1 章 · 地下线索',
+  progress: 68,
+  teamSync: 61
 }
 
-const scriptTemplates = ['山海志怪：雾泽铜铃', '江湖秘案：洛水断镖', '县衙诡案：黑雨纸铺']
+const fallbackScriptTemplates = [
+  '追捕克伦可',
+  '龙息之城的阴影',
+  '失落矿洞的秘密'
+]
+
+const scriptTemplates = computed(() => {
+  if (worlds.value.length > 0) {
+    return worlds.value.map((world) => world.name)
+  }
+
+  return fallbackScriptTemplates
+})
+
+const quickRooms = computed(() => {
+  if (sessions.value.length === 0) return fallbackQuickRooms
+
+  return sessions.value.slice(0, 3).map((session) => ({
+    name: session.title || `会话 #${session.id}`,
+    players: session.status === 'playing' ? '进行中' : session.status,
+    owner: props.currentUser?.nickname || props.currentUser?.username || '当前用户',
+    sessionId: session.id
+  }))
+})
+
+const joinableRooms = computed(() => quickRooms.value.map((room, index) => ({
+  id: room.sessionId || `preset-${index}`,
+  sessionId: room.sessionId || null,
+  name: room.name,
+  worldview: index === 1 ? 'COC 7th' : index === 2 ? 'Custom' : 'D&D 5e',
+  players: room.players,
+  status: room.sessionId ? '进行中' : '招募中'
+})))
+
+const lastAdventure = computed(() => {
+  const session = sessions.value[0]
+  if (!session) return fallbackLastAdventure
+
+  return {
+    title: session.title || `会话 #${session.id}`,
+    chapter: session.current_scene || '等待继续',
+    progress: session.status === 'playing' ? 68 : 100,
+    teamSync: session.status === 'playing' ? 61 : 100,
+    sessionId: session.id
+  }
+})
+
 const aiStyles = [
   { value: 'classic', label: '经典说书' },
   { value: 'immersive', label: '沉浸叙事' },
   { value: 'humorous', label: '轻松诙谐' },
-  { value: 'mysterious', label: '神秘悬疑' }
+  { value: 'mysterious', label: '悬疑迷雾' }
 ]
+
 const difficulties = [
-  { value: 'easy', label: '简单' },
-  { value: 'normal', label: '普通' },
+  { value: 'easy', label: '轻松' },
+  { value: 'normal', label: '标准' },
   { value: 'hard', label: '困难' },
   { value: 'nightmare', label: '噩梦' }
 ]
 
-const handleCreateRoom = () => {
-  console.log('创建房间数据:', { ...createRoomForm })
-  showCreateModal.value = false
+const refreshLobbyData = async () => {
+  try {
+    const [worldList, characterList, sessionList] = await Promise.all([
+      worldsApi.list(),
+      charactersApi.list(),
+      sessionsApi.list()
+    ])
+    worlds.value = worldList
+    characters.value = characterList
+    sessions.value = sessionList
+  } catch (error) {
+    apiStatus.value = error?.message || '大厅数据同步失败，请稍后重试。'
+  }
 }
 
-const handleJoinRoom = () => {
-  console.log('加入房间:', { roomCode: roomCode.value })
+const selectedWorld = () => (
+  worlds.value.find((world) => world.name === createRoomForm.scriptTemplate) || worlds.value[0] || null
+)
+
+const handleCreateRoom = async () => {
+  apiStatus.value = ''
+
+  if (characters.value.length === 0) {
+    showCreateModal.value = false
+    apiStatus.value = '请先创建角色，再开启冒险。'
+    emit('navigate', '角色', selectedWorld())
+    return
+  }
+
+  const world = selectedWorld()
+  if (!world) {
+    apiStatus.value = '暂时没有可用世界观。'
+    return
+  }
+
+  isSubmitting.value = true
+  try {
+    const data = await sessionsApi.start({
+      world_id: world.id,
+      character_id: characters.value[0].id
+    })
+    await refreshLobbyData()
+    showCreateModal.value = false
+    apiStatus.value = '冒险会话已创建。'
+    emit('session-created', data)
+  } catch (error) {
+    apiStatus.value = error?.message || '创建会话失败。'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const openJoinModal = () => {
+  joinRoomError.value = ''
+  showJoinModal.value = true
+}
+
+const closeJoinModal = () => {
+  joinRoomError.value = ''
+  showJoinModal.value = false
+}
+
+const handleJoinRoom = async ({ code = '', room = null } = {}) => {
+  joinRoomError.value = ''
+
+  if (room?.sessionId) {
+    closeJoinModal()
+    emit('session-created', { session: room })
+    return
+  }
+
+  const trimmedCode = code.trim()
+  if (trimmedCode) {
+    const sessionId = Number(trimmedCode)
+    if (!Number.isInteger(sessionId) || sessionId <= 0) {
+      joinRoomError.value = '房间号需要是有效的会话 ID。'
+      return
+    }
+
+    isSubmitting.value = true
+    try {
+      const session = await sessionsApi.get(sessionId)
+      closeJoinModal()
+      emit('session-created', { session })
+    } catch (error) {
+      joinRoomError.value = error?.message || '未找到可加入的房间。'
+    } finally {
+      isSubmitting.value = false
+    }
+    return
+  }
+
+  joinRoomError.value = '当前公开房间是展示样例，需输入真实房间号或选择已有会话。'
 }
 
 const handleContinue = () => {
-  console.log('继续上次冒险:', lastAdventure)
+  if (lastAdventure.value.sessionId) {
+    emit('session-created', { session: lastAdventure.value })
+    return
+  }
+  emit('navigate', '档案')
 }
 
 const handleQuickJoin = (room) => {
-  console.log('快速加入:', room)
+  if (room.sessionId) {
+    emit('session-created', { session: room })
+    return
+  }
+  openJoinModal()
 }
 
 const handleHistory = () => {
-  console.log('查看历史档案')
+  emit('navigate', '档案')
+}
+
+const handleAction = (action) => {
+  if (action.key === 'create') {
+    showCreateModal.value = true
+    return
+  }
+
+  if (action.key === 'join') {
+    openJoinModal()
+    return
+  }
+
+  if (action.key === 'continue') {
+    handleContinue()
+    return
+  }
+
+  handleHistory()
 }
 
 const handleNavigate = (page) => {
   activeNav.value = page
   emit('navigate', page)
 }
+
+onMounted(refreshLobbyData)
 </script>
 
 <template>
   <div class="home-page">
-    <div class="page-bg">
-      <div class="bg-overlay"></div>
+    <div class="scene-backdrop">
+      <img class="scene-image" :src="lobbyBackground" alt="大厅背景" />
+      <div class="scene-vignette"></div>
+      <div class="scene-lantern"></div>
+      <div class="scene-grid"></div>
     </div>
 
     <nav class="navbar">
       <div class="nav-logo">
-        <svg viewBox="0 0 32 32" fill="none" class="logo-icon">
-          <polygon points="16,2 28,10 28,22 16,30 4,22 4,10" fill="#f5b95b"/>
-          <polygon points="16,4 26,10 26,22 16,28 6,22 6,10" fill="#d49a3f"/>
-          <circle cx="16" cy="16" r="4" fill="#1a1a2e"/>
-          <text x="16" y="19" text-anchor="middle" fill="#f5b95b" font-size="8" font-weight="bold">SF</text>
-        </svg>
+        <img class="logo-icon" :src="productIcon" alt="StoryForge 产品图标" />
         <div class="logo-text">
           <span class="logo-en">StoryForge</span>
           <span class="logo-cn">灵境档案</span>
         </div>
       </div>
+
       <div class="nav-menu">
         <button
           v-for="item in navItems"
-          :key="item.name"
+          :key="item"
           class="nav-item"
-          :class="{ active: activeNav === item.name }"
-          @click="handleNavigate(item.name)"
+          :class="{ active: activeNav === item }"
+          @click="handleNavigate(item)"
         >
-          {{ item.name }}
+          {{ item }}
         </button>
       </div>
+
       <div class="nav-user">
-        <div class="user-avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+        <div class="user-chip">
+          <div class="user-avatar">夜</div>
+          <div class="user-info">
+            <span class="user-name">{{ props.currentUser?.nickname || props.currentUser?.username || '游客' }}</span>
+            <span class="user-level">Lv.12</span>
+          </div>
         </div>
-        <div class="user-info">
-          <span class="user-name">夜行者</span>
-          <span class="user-level">Lv.12</span>
-        </div>
-        <button class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+        <button class="nav-icon" aria-label="消息">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M4 6h16v12H4z" />
+            <path d="m4 7 8 6 8-6" />
           </svg>
         </button>
-        <button class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+        <button class="nav-icon" aria-label="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.82l.05.06a2 2 0 1 1-2.83 2.83l-.06-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.52 1.7 1.7 0 0 0-1.9.36l-.06.05a2 2 0 1 1-2.83-2.83l.05-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1H3a2 2 0 1 1 0-4h.08A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.82l-.05-.06a2 2 0 1 1 2.83-2.83l.06.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.52V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.52 1.7 1.7 0 0 0 1.9-.36l.06-.05a2 2 0 1 1 2.83 2.83l-.05.06A1.7 1.7 0 0 0 19.4 9c.14.47.66.8 1.15.8H21a2 2 0 1 1 0 4h-.45c-.49 0-1.01.33-1.15.8Z" />
           </svg>
         </button>
       </div>
     </nav>
 
-    <main class="main-content">
-      <div class="content-wrapper">
-        <section class="friends-section">
-          <div class="friends-header">
-            <div class="friends-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-                <path d="M16 3.13a4 4 0 010 7.75"/>
-              </svg>
-              <span>好友在线</span>
-              <span class="online-count">{{ friendsList.filter(f => f.status === 'online').length }}</span>
+    <main class="lobby-shell">
+      <section class="hero-grid">
+        <div class="hero-copy">
+          <div class="hero-mark">
+            <img class="hero-mark-icon" :src="productIcon" alt="" />
+            <span>灵境档案大厅</span>
+          </div>
+          <h1 class="hero-title">StoryForge</h1>
+          <div class="hero-subtitle">
+            <span></span>
+            <p>灵境档案</p>
+            <span></span>
+          </div>
+          <p class="hero-text">
+            AI 掌卷人已启封卷宗，等待新的冒险者入局。
+            创建房间，邀请同伴，选择模组，在同一张桌上继续属于你们的传奇。
+          </p>
+
+          <section class="action-row">
+            <button
+              v-for="card in actionCards"
+              :key="card.key"
+              class="action-card"
+              :class="[card.tone, { active: card.key === 'create' }]"
+              @click="handleAction(card)"
+            >
+              <div class="action-border"></div>
+              <div class="action-icon" :class="card.tone">
+                <img :src="card.icon" :alt="card.title" />
+              </div>
+              <strong>{{ card.title }}</strong>
+              <span>{{ card.subtitle }}</span>
+            </button>
+          </section>
+          <p v-if="apiStatus" class="lobby-status">{{ apiStatus }}</p>
+        </div>
+
+        <aside class="side-panels">
+          <section class="panel continue-panel">
+            <div class="panel-header">
+              <div class="panel-heading">
+                <img class="panel-icon orb" :src="orbIcon" alt="" />
+                <span>继续上次冒险</span>
+              </div>
             </div>
-            <div class="friends-list">
-              <div
-                v-for="(friend, index) in friendsList"
-                :key="index"
-                class="friend-item"
+
+            <div class="continue-card">
+              <div class="adventure-cover">
+                <img :src="goblinCover" alt="追捕克伦可" />
+                <div class="cover-glow"></div>
+              </div>
+
+              <div class="adventure-detail">
+                <h3>{{ lastAdventure.title }}</h3>
+                <p class="chapter">{{ lastAdventure.chapter }}</p>
+                <p class="group-name">当前团：追捕克伦可团</p>
+                <div class="progress-meta">
+                  <span>进度：{{ lastAdventure.progress }}%</span>
+                  <span>{{ lastAdventure.teamSync }}%</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: `${lastAdventure.progress}%` }"></div>
+                </div>
+              </div>
+            </div>
+
+            <button class="panel-button primary" @click="handleContinue">继续冒险</button>
+          </section>
+
+          <section class="panel quick-panel">
+            <div class="panel-header">
+              <div class="panel-heading">
+                <img class="panel-icon orb" :src="orbIcon" alt="" />
+                <span>快捷进入</span>
+              </div>
+              <button class="panel-link">最近房间</button>
+            </div>
+
+            <div class="quick-list">
+              <article
+                v-for="room in quickRooms"
+                :key="room.name"
+                class="quick-item"
               >
-                <div class="friend-avatar">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                    <circle cx="12" cy="7" r="4"/>
-                  </svg>
-                  <span class="status-dot" :class="friend.status"></span>
+                <div class="quick-badge">
+                  <img :src="productIcon" alt="" />
                 </div>
-                <span class="friend-name">{{ friend.name }}</span>
-              </div>
-            </div>
-            <button class="view-all-friends">查看全部 ></button>
-          </div>
-        </section>
-
-        <section class="hero-section">
-          <div class="hero-main">
-            <div class="hero-bg"></div>
-            <div class="hero-content">
-              <h1 class="hero-title">你的故事，</h1>
-              <h1 class="hero-title">由你塑造</h1>
-              <p class="hero-desc">与伙伴共创史诗，探索无限可能</p>
-              <p class="hero-desc">与伙伴共创史诗，探索无限可能</p>
-              <button class="hero-btn" @click="showCreateModal = true">开启新的冒险</button>
-            </div>
-          </div>
-
-          <div class="hero-right">
-            <div class="continue-panel">
-              <div class="panel-header">
-                <span class="panel-title">继续上次冒险</span>
-              </div>
-              <div class="adventure-info">
-                <div class="adventure-cover"></div>
-                <div class="adventure-detail">
-                  <h4 class="adventure-title">{{ lastAdventure.title }}</h4>
-                  <p class="adventure-chapter">{{ lastAdventure.chapter }}</p>
-                  <div class="progress-wrap">
-                    <div class="progress-bar">
-                      <div class="progress-fill" :style="{ width: lastAdventure.progress + '%' }"></div>
-                    </div>
-                    <span class="progress-text">进度: {{ lastAdventure.progress }}%</span>
-                  </div>
+                <div class="quick-info">
+                  <h4>{{ room.name }}</h4>
+                  <p>房主：{{ room.owner }}</p>
                 </div>
-              </div>
-              <button class="continue-btn" @click="handleContinue">继续冒险</button>
-            </div>
-
-            <div class="quick-panel">
-              <div class="panel-header">
-                <span class="panel-title">快速加入</span>
-                <button class="panel-more">更多 ></button>
-              </div>
-              <div class="quick-list">
-                <div
-                  v-for="(room, index) in quickRooms"
-                  :key="index"
-                  class="quick-item"
-                >
-                  <div class="quick-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                      <path d="M2 17l10 5 10-5"/>
-                      <path d="M2 12l10 5 10-5"/>
-                    </svg>
-                  </div>
-                  <div class="quick-info">
-                    <span class="quick-name">{{ room.name }}</span>
-                    <span class="quick-meta">房主: {{ room.owner }}</span>
-                  </div>
-                  <div class="quick-status">
-                    <span class="player-count">{{ room.players }}</span>
-                    <button class="quick-join" @click="handleQuickJoin(room)">加入</button>
-                  </div>
+                <div class="quick-actions">
+                  <span class="quick-players">{{ room.players }} 人</span>
+                  <button class="panel-button small" @click="handleQuickJoin(room)">快速加入</button>
                 </div>
-              </div>
-              <button class="view-more-rooms">查看更多房间</button>
+              </article>
             </div>
-          </div>
-        </section>
-
-        <section class="feature-section">
-          <div class="feature-cards">
-            <button class="feature-card gold-card" @click="showCreateModal = true">
-              <div class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-                </svg>
-              </div>
-              <span class="card-title">创建房间</span>
-              <span class="card-subtitle">开启新的故事</span>
-            </button>
-            <button class="feature-card blue-card" @click="handleJoinRoom">
-              <div class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                </svg>
-              </div>
-              <span class="card-title">加入房间</span>
-              <span class="card-subtitle">输入房号加入</span>
-            </button>
-            <button class="feature-card dark-card" @click="handleContinue">
-              <div class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-                  <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-              </div>
-              <span class="card-title">继续冒险</span>
-              <span class="card-subtitle">续写未完的篇章</span>
-            </button>
-            <button class="feature-card dark-card" @click="handleHistory">
-              <div class="card-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                </svg>
-              </div>
-              <span class="card-title">查看档案</span>
-              <span class="card-subtitle">探索你的故事世界</span>
-            </button>
-          </div>
-        </section>
-
-      </div>
+          </section>
+        </aside>
+      </section>
     </main>
+
+    <JoinRoomModal
+      v-if="showJoinModal"
+      :rooms="joinableRooms"
+      :error-message="joinRoomError"
+      @close="closeJoinModal"
+      @join="handleJoinRoom"
+      @clear-error="joinRoomError = ''"
+    />
 
     <div class="modal-overlay" v-if="showCreateModal" @click="showCreateModal = false">
       <div class="modal-content" @click.stop>
@@ -303,10 +469,11 @@ const handleNavigate = (page) => {
           <h3 class="modal-title">创建房间</h3>
           <button class="modal-close" @click="showCreateModal = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M6 18L18 6M6 6l12 12"/>
+              <path d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
+
         <form class="modal-form" @submit.prevent="handleCreateRoom">
           <div class="form-row">
             <div class="form-group">
@@ -319,15 +486,27 @@ const handleNavigate = (page) => {
                 required
               />
             </div>
+
             <div class="form-group">
-              <label class="form-label">剧本模板</label>
+              <label class="form-label">模组模板</label>
               <select v-model="createRoomForm.scriptTemplate" class="form-select" required>
-                <option value="">请选择剧本</option>
+                <option value="">请选择模组</option>
                 <option v-for="template in scriptTemplates" :key="template" :value="template">{{ template }}</option>
               </select>
             </div>
           </div>
+
           <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">房间邀请码</label>
+              <input
+                v-model="roomCode"
+                type="text"
+                class="form-input"
+                placeholder="可选，留空则自动生成"
+              />
+            </div>
+
             <div class="form-group">
               <label class="form-label">人数上限</label>
               <select v-model="createRoomForm.maxPlayers" class="form-select">
@@ -338,37 +517,41 @@ const handleNavigate = (page) => {
                 <option :value="6">6 人</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label">房间类型</label>
-              <div class="radio-group">
-                <label class="radio-item">
-                  <input type="radio" v-model="createRoomForm.roomType" value="public" />
-                  <span>公开房间</span>
-                </label>
-                <label class="radio-item">
-                  <input type="radio" v-model="createRoomForm.roomType" value="private" />
-                  <span>私密房间</span>
-                </label>
-              </div>
-            </div>
           </div>
+
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">AI 主持风格</label>
+              <label class="form-label">AI 掌卷风格</label>
               <select v-model="createRoomForm.aiStyle" class="form-select">
                 <option v-for="style in aiStyles" :key="style.value" :value="style.value">{{ style.label }}</option>
               </select>
             </div>
+
             <div class="form-group">
-              <label class="form-label">难度设置</label>
+              <label class="form-label">挑战难度</label>
               <select v-model="createRoomForm.difficulty" class="form-select">
                 <option v-for="diff in difficulties" :key="diff.value" :value="diff.value">{{ diff.label }}</option>
               </select>
             </div>
           </div>
+
+          <div class="form-group">
+            <label class="form-label">房间类型</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" v-model="createRoomForm.roomType" value="public" />
+                <span>公开房间</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" v-model="createRoomForm.roomType" value="private" />
+                <span>私密房间</span>
+              </label>
+            </div>
+          </div>
+
           <div class="modal-footer">
-            <button type="button" class="btn-cancel" @click="showCreateModal = false">取消</button>
-            <button type="submit" class="btn-confirm">创建房间</button>
+            <button type="button" class="panel-button secondary" @click="showCreateModal = false">取消</button>
+            <button type="submit" class="panel-button primary solid">创建房间</button>
           </div>
         </form>
       </div>
@@ -378,809 +561,688 @@ const handleNavigate = (page) => {
 
 <style scoped>
 .home-page {
-  min-height: 100vh;
   position: relative;
-  background: #1a1510;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #050607;
+  color: #f5dfb2;
 }
 
-.page-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: 
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 40px,
-      rgba(61, 48, 36, 0.05) 40px,
-      rgba(61, 48, 36, 0.05) 41px
-    ),
-    radial-gradient(ellipse at 10% 20%, rgba(139, 115, 85, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 80%, rgba(92, 61, 61, 0.08) 0%, transparent 40%),
-    linear-gradient(180deg, #1a1510 0%, #2d241a 50%, #1a1510 100%);
+.scene-backdrop,
+.scene-vignette,
+.scene-lantern,
+.scene-grid {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-backdrop {
   z-index: 0;
 }
 
-.bg-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
+.scene-image {
   width: 100%;
   height: 100%;
-  background: 
-    radial-gradient(ellipse at 50% 0%, rgba(201, 169, 98, 0.03) 0%, transparent 60%),
-    radial-gradient(ellipse at 30% 50%, rgba(139, 115, 85, 0.02) 0%, transparent 40%);
+  object-fit: cover;
+  object-position: center;
+  filter: brightness(0.82) saturate(0.95);
+  transform: scale(1.02);
+}
+
+.scene-vignette {
+  background:
+    linear-gradient(90deg, rgba(3, 6, 12, 0.96) 0%, rgba(4, 7, 13, 0.92) 31%, rgba(5, 7, 12, 0.3) 58%, rgba(22, 11, 4, 0.7) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.54) 0%, transparent 18%, transparent 82%, rgba(0, 0, 0, 0.56) 100%);
+}
+
+.scene-lantern {
+  background:
+    radial-gradient(circle at 84% 28%, rgba(255, 170, 61, 0.16), transparent 11%),
+    radial-gradient(circle at 64% 26%, rgba(89, 206, 255, 0.18), transparent 13%),
+    radial-gradient(circle at 63% 68%, rgba(255, 183, 72, 0.18), transparent 16%);
+  mix-blend-mode: screen;
+}
+
+.scene-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 120px 120px;
+  opacity: 0.08;
 }
 
 .navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  display: flex;
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 40px;
-  background: rgba(26, 21, 16, 0.95);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(139, 115, 85, 0.2);
-  z-index: 100;
+  gap: 20px;
+  padding: 18px 34px 10px;
+  border-bottom: 1px solid rgba(221, 174, 94, 0.14);
+  background: linear-gradient(180deg, rgba(4, 4, 6, 0.88), rgba(4, 4, 6, 0.44));
+  backdrop-filter: blur(10px);
+}
+
+.navbar::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 92px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(248, 199, 99, 0.96), transparent);
+  box-shadow: 0 0 15px rgba(248, 199, 99, 0.45);
 }
 
 .nav-logo {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(240, 190, 90, 0.18));
 }
 
 .logo-text {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.04;
 }
 
 .logo-en {
-  font-size: 16px;
-  font-weight: 700;
-  color: #c9a962;
-  letter-spacing: 1px;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  color: #efc26a;
 }
 
 .logo-cn {
-  font-size: 10px;
-  color: #a67c52;
-  letter-spacing: 2px;
-  font-family: 'KaiTi', 'STKaiti', serif;
+  margin-top: 2px;
+  font-size: 0.88rem;
+  letter-spacing: 0.26em;
+  color: rgba(241, 198, 108, 0.86);
 }
 
 .nav-menu {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
 }
 
 .nav-item {
-  padding: 10px 28px;
-  background: none;
-  border: none;
-  color: #8b7355;
-  font-size: 15px;
-  font-weight: 500;
+  position: relative;
+  padding: 8px 4px 14px;
+  border: 0;
+  background: transparent;
+  color: rgba(250, 226, 179, 0.8);
+  font-size: 1rem;
+  letter-spacing: 0.16em;
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  transition: color 0.25s ease, transform 0.25s ease;
 }
 
-.nav-item:hover {
-  color: #c9a962;
-  background: rgba(139, 115, 85, 0.1);
-}
-
+.nav-item:hover,
 .nav-item.active {
-  color: #c9a962;
-  background: rgba(201, 169, 98, 0.1);
-  border-bottom: 2px solid #c9a962;
+  color: #f6c56e;
+  transform: translateY(-1px);
+}
+
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 72px;
+  height: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(247, 192, 88, 0.96), transparent);
+  box-shadow: 0 0 14px rgba(247, 192, 88, 0.5);
 }
 
 .nav-user {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 7px;
+  border: 1px solid rgba(237, 187, 93, 0.2);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(54, 34, 10, 0.45), rgba(11, 11, 14, 0.45));
 }
 
 .user-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  background: rgba(139, 115, 85, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(139, 115, 85, 0.6);
-}
-
-.user-avatar svg {
-  width: 22px;
-  height: 22px;
-  color: #8b7355;
+  border: 1px solid rgba(248, 196, 94, 0.34);
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 222, 170, 0.28), transparent 26%),
+    linear-gradient(180deg, #3f2c12, #17100a);
+  color: #f7cc7d;
+  font-weight: 700;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: 2px;
 }
 
 .user-name {
-  font-size: 14px;
-  color: #f5efe6;
+  color: #f7d389;
   font-weight: 600;
 }
 
 .user-level {
-  padding: 2px 10px;
-  background: rgba(139, 115, 85, 0.2);
-  border: 1px solid rgba(139, 115, 85, 0.5);
-  border-radius: 12px;
-  font-size: 12px;
-  color: #8b7355;
-  font-weight: 600;
+  color: rgba(240, 222, 185, 0.76);
+  font-size: 0.84rem;
 }
 
 .nav-icon {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(139, 115, 85, 0.1);
-  border: none;
-  border-radius: 6px;
-  color: #8b7355;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(241, 191, 94, 0.22);
+  background: rgba(10, 11, 14, 0.55);
+  color: rgba(247, 205, 122, 0.88);
   cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.nav-icon:hover {
-  background: rgba(139, 115, 85, 0.2);
-  color: #c9a962;
 }
 
 .nav-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.lobby-shell {
+  position: relative;
+  z-index: 2;
+  max-width: 1620px;
+  margin: 0 auto;
+  padding: 18px 34px 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(340px, 498px);
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.hero-copy {
+  max-width: 700px;
+  padding-top: 8px;
+}
+
+.hero-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border: 1px solid rgba(242, 194, 103, 0.2);
+  border-radius: 999px;
+  background: rgba(7, 9, 14, 0.28);
+  color: rgba(247, 213, 143, 0.88);
+  letter-spacing: 0.18em;
+  font-size: 0.8rem;
+}
+
+.hero-mark-icon {
   width: 16px;
   height: 16px;
 }
 
-.main-content {
-  position: relative;
-  z-index: 10;
-  padding-top: 80px;
-  padding-bottom: 40px;
-}
-
-.content-wrapper {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.hero-section {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
-.hero-main {
-  flex: 2;
-  position: relative;
-  border-radius: 4px;
-  overflow: hidden;
-  height: 380px;
-  background: #f5efe6;
-  box-shadow: 
-    0 4px 20px rgba(0, 0, 0, 0.3),
-    inset 0 0 60px rgba(139, 115, 85, 0.05);
-}
-
-.hero-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: 
-    linear-gradient(180deg, rgba(245, 239, 230, 0.98) 0%, rgba(232, 224, 213, 0.95) 100%),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 30px,
-      rgba(139, 115, 85, 0.03) 30px,
-      rgba(139, 115, 85, 0.03) 31px
-    );
-}
-
-.hero-bg::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border: 1px solid rgba(139, 115, 85, 0.15);
-  pointer-events: none;
-}
-
-.hero-content {
-  position: relative;
-  z-index: 2;
-  padding: 48px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
 .hero-title {
-  font-size: 48px;
-  font-weight: 700;
-  color: #2d241a;
-  line-height: 1.2;
-  margin: 0;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  margin-top: 18px;
+  font-size: clamp(4.2rem, 7vw, 7rem);
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  color: #f4d08c;
+  text-shadow: 0 0 25px rgba(231, 175, 72, 0.18);
 }
 
-.hero-desc {
-  font-size: 16px;
-  color: #4a3d32;
-  margin-top: 16px;
-  font-weight: 400;
-  font-family: 'Georgia', 'Times New Roman', serif;
-  line-height: 1.6;
-}
-
-.hero-btn {
-  margin-top: 28px;
-  padding: 12px 32px;
-  background: #2d241a;
-  border: 1px solid #4a3d32;
-  border-radius: 2px;
-  color: #f5efe6;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  align-self: flex-start;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.hero-btn:hover {
-  background: #3d3024;
-  border-color: #6b5a4a;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.hero-right {
-  flex: 1;
+.hero-subtitle {
+  margin-top: 12px;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  gap: 14px;
 }
 
-.continue-panel,
-.quick-panel {
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 4px;
-  overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+.hero-subtitle span {
+  width: 112px;
+  max-width: 18vw;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(246, 196, 96, 0.6), transparent);
+}
+
+.hero-subtitle p {
+  color: #f5c86f;
+  font-size: clamp(1.3rem, 2.8vw, 2.2rem);
+  letter-spacing: 0.56em;
+  white-space: nowrap;
+}
+
+.hero-text {
+  max-width: 540px;
+  margin-top: 16px;
+  color: rgba(248, 233, 204, 0.86);
+  font-size: 1.08rem;
+  line-height: 1.88;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}
+
+.side-panels {
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  border: 1px solid rgba(68, 146, 191, 0.24);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(7, 19, 26, 0.76), rgba(8, 10, 14, 0.86)),
+    rgba(5, 8, 14, 0.72);
+  box-shadow:
+    0 22px 42px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(111, 183, 224, 0.06);
+  backdrop-filter: blur(12px);
 }
 
 .panel-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
-  background: rgba(139, 115, 85, 0.08);
-  border-bottom: 1px solid rgba(139, 115, 85, 0.15);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
 }
 
-.panel-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #3d3024;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.panel-more {
-  background: none;
-  border: none;
-  color: #8b7355;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: color 0.3s ease;
-}
-
-.panel-more:hover {
-  color: #c9a962;
-}
-
-.adventure-info {
+.panel-heading {
   display: flex;
-  gap: 14px;
-  padding: 18px;
+  align-items: center;
+  gap: 10px;
+  color: #efc66f;
+  font-size: 1.16rem;
+  font-weight: 600;
+}
+
+.panel-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.panel-icon.orb {
+  filter: brightness(1.2) sepia(1) saturate(0.1) hue-rotate(160deg);
+}
+
+.panel-link {
+  border: 0;
+  background: transparent;
+  color: rgba(111, 192, 230, 0.9);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.continue-card {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 20px 16px;
 }
 
 .adventure-cover {
-  width: 80px;
-  height: 80px;
-  background: #3d3024;
-  border-radius: 2px;
-  flex-shrink: 0;
   position: relative;
+  min-height: 118px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid rgba(139, 115, 85, 0.3);
+  border: 1px solid rgba(111, 183, 224, 0.14);
 }
 
-.adventure-cover::before {
-  content: '';
+.adventure-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-glow {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%238b7355' font-size='18' font-weight='bold'%3E%E6%9C%A8%E7%BB%84%E7%AD%89%E7%9B%AE%E6%A0%87%3C/text%3E%3C/svg%3E") no-repeat center;
-  opacity: 0.2;
+  inset: auto 10% 7% 10%;
+  height: 24px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 186, 74, 0.76), transparent 72%);
+  filter: blur(6px);
 }
 
-.adventure-detail {
-  flex: 1;
+.adventure-detail h3 {
+  font-size: 1.72rem;
+  line-height: 1.08;
+  color: #f7ead2;
+}
+
+.adventure-detail .chapter,
+.group-name {
+  margin-top: 8px;
+  color: rgba(243, 230, 201, 0.78);
+  font-size: 0.95rem;
+}
+
+.group-name {
+  color: rgba(245, 211, 145, 0.82);
+}
+
+.progress-meta {
   display: flex;
-  flex-direction: column;
-}
-
-.adventure-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2d241a;
-  margin-bottom: 4px;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.adventure-chapter {
-  font-size: 12px;
-  color: #6b5a45;
-  margin-bottom: 10px;
-}
-
-.progress-wrap {
-  margin-top: auto;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  color: rgba(246, 229, 191, 0.88);
+  font-size: 0.95rem;
 }
 
 .progress-bar {
-  height: 4px;
-  background: rgba(139, 115, 85, 0.15);
-  border-radius: 2px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
   overflow: hidden;
-  margin-bottom: 4px;
+  background: rgba(86, 104, 118, 0.42);
 }
 
 .progress-fill {
   height: 100%;
-  background: #8b7355;
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-.progress-text {
-  font-size: 11px;
-  color: #6b5a45;
-}
-
-.continue-btn {
-  width: calc(100% - 36px);
-  margin: 0 18px 18px;
-  padding: 10px;
-  background: #2d241a;
-  border: 1px solid #4a3d32;
-  border-radius: 2px;
-  color: #f5efe6;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-family: 'Georgia', 'Times New Roman', serif;
-}
-
-.continue-btn:hover {
-  background: #3d3024;
-  border-color: #6b5a45;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3ab3ef, #7ce2ff);
+  box-shadow: 0 0 18px rgba(84, 205, 255, 0.35);
 }
 
 .quick-list {
-  padding: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 0 20px 20px;
 }
 
 .quick-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  border-radius: 4px;
-  transition: background 0.3s ease;
-  cursor: pointer;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(8, 15, 20, 0.5);
+  border: 1px solid rgba(90, 154, 192, 0.12);
 }
 
-.quick-item:hover {
-  background: rgba(139, 115, 85, 0.08);
+.quick-badge {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(241, 191, 94, 0.28);
+  background: radial-gradient(circle, rgba(61, 45, 18, 0.76), rgba(7, 9, 13, 0.95));
 }
 
-.quick-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #8b7355;
-  background: rgba(139, 115, 85, 0.1);
-  border-radius: 4px;
+.quick-badge img {
+  width: 20px;
+  height: 20px;
 }
 
-.quick-icon svg {
-  width: 16px;
-  height: 16px;
+.quick-info h4 {
+  color: #f2d28b;
+  font-size: 1.02rem;
 }
 
-.quick-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.quick-info p {
+  margin-top: 4px;
+  color: rgba(238, 225, 197, 0.72);
 }
 
-.quick-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #3d3024;
-}
-
-.quick-meta {
-  font-size: 11px;
-  color: #6b5a45;
-}
-
-.quick-status {
+.quick-actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 8px;
 }
 
-.player-count {
-  font-size: 11px;
-  color: #8b7355;
+.quick-players {
+  color: #7fd7ff;
 }
 
-.quick-join {
-  padding: 6px 14px;
-  background: rgba(139, 115, 85, 0.1);
-  border: 1px solid rgba(139, 115, 85, 0.3);
-  border-radius: 2px;
-  color: #6b5a45;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.quick-join:hover {
-  background: rgba(139, 115, 85, 0.2);
-  border-color: rgba(139, 115, 85, 0.5);
-}
-
-.view-more-rooms {
-  width: calc(100% - 36px);
-  margin: 0 18px 18px;
-  padding: 10px;
-  background: rgba(139, 115, 85, 0.08);
-  border: 1px solid rgba(139, 115, 85, 0.15);
-  border-radius: 2px;
-  color: #6b5a45;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.view-more-rooms:hover {
-  background: rgba(139, 115, 85, 0.15);
-}
-
-.feature-section {
-  margin-bottom: 24px;
-}
-
-.feature-cards {
+.action-row {
+  margin-top: 28px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.feature-card {
-  padding: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.lobby-status {
+  margin-top: 14px;
+  color: #7fd7ff;
+  font-size: 0.95rem;
+}
+
+.action-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 150px;
+  padding: 18px 12px;
+  border: 1px solid rgba(176, 136, 65, 0.25);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(8, 11, 17, 0.65), rgba(8, 10, 14, 0.82)),
+    rgba(0, 0, 0, 0.4);
+  color: #f7e3bc;
   text-align: center;
-  border: 1px solid transparent;
-  background: #f5efe6;
+  cursor: pointer;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  backdrop-filter: blur(8px);
+  overflow: hidden;
 }
 
-.feature-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.action-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 40%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.02), transparent 45%);
+  pointer-events: none;
 }
 
-.gold-card {
-  background: linear-gradient(145deg, rgba(139, 115, 85, 0.08) 0%, rgba(201, 169, 98, 0.05) 100%);
-  border-color: rgba(139, 115, 85, 0.2);
+.action-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(248, 196, 94, 0.4);
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.28);
 }
 
-.gold-card:hover {
-  border-color: rgba(139, 115, 85, 0.35);
-  box-shadow: 0 4px 16px rgba(139, 115, 85, 0.1);
+.action-card.active {
+  border-color: rgba(248, 196, 94, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(250, 200, 95, 0.4),
+    0 14px 26px rgba(0, 0, 0, 0.32),
+    inset 0 0 24px rgba(248, 191, 77, 0.06);
 }
 
-.gold-card .card-icon {
-  color: #8b7355;
-  background: rgba(139, 115, 85, 0.15);
+.action-border {
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  border-radius: 12px;
+  pointer-events: none;
 }
 
-.gold-card .card-title {
-  color: #3d3024;
-}
-
-.blue-card {
-  background: linear-gradient(145deg, rgba(139, 115, 85, 0.06) 0%, rgba(92, 61, 61, 0.04) 100%);
-  border-color: rgba(139, 115, 85, 0.15);
-}
-
-.blue-card:hover {
-  border-color: rgba(139, 115, 85, 0.3);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.blue-card .card-icon {
-  color: #8b7355;
-  background: rgba(139, 115, 85, 0.12);
-}
-
-.blue-card .card-title {
-  color: #3d3024;
-}
-
-.dark-card {
-  background: #f5efe6;
-  border-color: rgba(139, 115, 85, 0.15);
-}
-
-.dark-card:hover {
-  border-color: rgba(139, 115, 85, 0.3);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.dark-card .card-icon {
-  color: #8b7355;
-  background: rgba(139, 115, 85, 0.12);
-}
-
-.dark-card .card-title {
-  color: #3d3024;
-}
-
-.card-icon {
+.action-icon {
   width: 56px;
   height: 56px;
-  margin: 0 auto 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 216, 153, 0.2);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.card-icon svg {
-  width: 24px;
-  height: 24px;
+.action-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
-.card-title {
-  display: block;
-  font-size: 15px;
+.action-card strong {
+  font-size: 1.2rem;
   font-weight: 600;
-  margin-bottom: 4px;
-  color: #2d241a;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  letter-spacing: 0.06em;
 }
 
-.card-subtitle {
-  display: block;
-  font-size: 12px;
-  color: #6b5a45;
+.action-card span {
+  color: rgba(245, 232, 205, 0.72);
+  font-size: 0.98rem;
+  letter-spacing: 0.12em;
 }
 
-.friends-section {
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.15);
-  border-radius: 4px;
-  padding: 16px 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+.action-card.gold {
+  border-color: rgba(241, 187, 88, 0.32);
 }
 
-.friends-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
+.action-card.gold .action-icon {
+  box-shadow: inset 0 0 20px rgba(247, 193, 92, 0.08);
 }
 
-.friends-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #3d3024;
-  font-family: 'Georgia', 'Times New Roman', serif;
+.action-card.gold .action-icon img,
+.action-card.gold.active .action-icon img {
+  filter: brightness(0) saturate(100%) invert(78%) sepia(57%) saturate(557%) hue-rotate(356deg) brightness(101%) contrast(93%);
 }
 
-.friends-title svg {
-  width: 16px;
-  height: 16px;
-  color: #8b7355;
+.action-card.cyan {
+  border-color: rgba(86, 170, 207, 0.28);
 }
 
-.online-count {
-  padding: 2px 8px;
-  background: rgba(139, 115, 85, 0.15);
-  border: 1px solid rgba(139, 115, 85, 0.3);
-  border-radius: 8px;
-  font-size: 11px;
-  color: #6b5a45;
+.action-card.cyan .action-border,
+.action-card.cyan .action-icon {
+  border-color: rgba(115, 219, 255, 0.2);
 }
 
-.friends-list {
-  flex: 1;
-  display: flex;
-  gap: 16px;
+.action-card.cyan .action-icon img {
+  filter: brightness(0) saturate(100%) invert(72%) sepia(47%) saturate(1714%) hue-rotate(165deg) brightness(101%) contrast(102%);
 }
 
-.friend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.action-card.ember .action-icon img {
+  filter: brightness(0) saturate(100%) invert(81%) sepia(39%) saturate(626%) hue-rotate(353deg) brightness(100%) contrast(92%);
 }
 
-.friend-avatar {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(139, 115, 85, 0.12);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.action-card.steel .action-icon img {
+  filter: brightness(0) saturate(100%) invert(91%) sepia(16%) saturate(274%) hue-rotate(170deg) brightness(89%) contrast(86%);
 }
 
-.friend-avatar svg {
-  width: 18px;
-  height: 18px;
-  color: #6b5a45;
-}
-
-.status-dot {
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid #f5efe6;
-}
-
-.status-dot.online {
-  background: #8b7355;
-}
-
-.status-dot.offline {
-  background: #a6957a;
-}
-
-.friend-name {
-  font-size: 12px;
-  color: #4a3d32;
-}
-
-.view-all-friends {
-  background: none;
-  border: none;
-  color: #6b5a45;
-  font-size: 12px;
+.panel-button {
+  border: 1px solid rgba(243, 191, 92, 0.26);
+  background: rgba(30, 20, 8, 0.48);
+  color: #f4ce86;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: color 0.3s ease;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-.view-all-friends:hover {
-  color: #8b7355;
+.panel-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(243, 191, 92, 0.42);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
+}
+
+.panel-button.primary {
+  width: calc(100% - 40px);
+  margin: 0 20px 20px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  color: #fde7bf;
+  font-size: 1.12rem;
+  font-weight: 600;
+}
+
+.panel-button.primary:not(.solid) {
+  background: linear-gradient(180deg, rgba(122, 78, 24, 0.86), rgba(77, 49, 16, 0.92));
+}
+
+.panel-button.primary.solid {
+  margin: 0;
+}
+
+.panel-button.secondary {
+  padding: 12px 22px;
+  border-radius: 14px;
+}
+
+.panel-button.small {
+  padding: 9px 16px;
+  border-radius: 12px;
+  color: #f7d497;
 }
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(26, 21, 16, 0.8);
-  backdrop-filter: blur(4px);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(12px);
 }
 
 .modal-content {
-  width: 100%;
-  max-width: 560px;
-  background: #f5efe6;
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 4px;
+  width: min(720px, calc(100vw - 32px));
   padding: 28px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 22px;
+  border: 1px solid rgba(241, 191, 94, 0.24);
+  background:
+    linear-gradient(180deg, rgba(14, 17, 23, 0.96), rgba(8, 10, 14, 0.98)),
+    #090b10;
+  box-shadow: 0 34px 52px rgba(0, 0, 0, 0.42);
 }
 
 .modal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .modal-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2d241a;
-  font-family: 'Georgia', 'Times New Roman', serif;
+  color: #f5d18b;
+  font-size: 1.56rem;
 }
 
 .modal-close {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(139, 115, 85, 0.1);
-  border: none;
-  border-radius: 4px;
-  color: #6b5a45;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(241, 191, 94, 0.18);
+  border-radius: 50%;
+  background: rgba(16, 17, 22, 0.9);
+  color: #f2cb7a;
   cursor: pointer;
-}
-
-.modal-close:hover {
-  background: rgba(139, 115, 85, 0.2);
-  color: #3d3024;
-}
-
-.modal-close svg {
-  width: 16px;
-  height: 16px;
 }
 
 .modal-form {
@@ -1191,181 +1253,136 @@ const handleNavigate = (page) => {
 
 .form-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .form-label {
-  font-size: 12px;
-  color: #6b5a45;
-  font-weight: 500;
+  color: rgba(245, 226, 192, 0.84);
+  font-size: 0.95rem;
 }
 
 .form-input,
 .form-select {
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 2px;
-  color: #2d241a;
-  font-size: 13px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(105, 147, 173, 0.24);
+  border-radius: 14px;
+  background: rgba(10, 16, 22, 0.88);
+  color: #f6ead1;
   outline: none;
-  transition: all 0.3s ease;
 }
 
 .form-input::placeholder {
-  color: #a6957a;
+  color: rgba(181, 190, 201, 0.52);
 }
 
 .form-input:focus,
 .form-select:focus {
-  border-color: #8b7355;
-  box-shadow: 0 0 6px rgba(139, 115, 85, 0.15);
-}
-
-.form-select option {
-  background: #f5efe6;
-  color: #2d241a;
+  border-color: rgba(104, 197, 240, 0.5);
+  box-shadow: 0 0 0 4px rgba(52, 149, 192, 0.12);
 }
 
 .radio-group {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .radio-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #4a3d32;
-  cursor: pointer;
+  gap: 8px;
+  color: rgba(245, 229, 194, 0.9);
 }
 
-.radio-item input[type="radio"] {
-  width: 14px;
-  height: 14px;
-  accent-color: #8b7355;
+.radio-item input {
+  accent-color: #f1bb5e;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 12px;
+  margin-top: 4px;
 }
 
-.btn-cancel {
-  padding: 10px 20px;
-  background: rgba(139, 115, 85, 0.08);
-  border: 1px solid rgba(139, 115, 85, 0.2);
-  border-radius: 2px;
-  color: #6b5a45;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-cancel:hover {
-  background: rgba(139, 115, 85, 0.15);
-  color: #3d3024;
-}
-
-.btn-confirm {
-  padding: 10px 20px;
-  background: #2d241a;
-  border: 1px solid #4a3d32;
-  border-radius: 2px;
-  color: #f5efe6;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-confirm:hover {
-  background: #3d3024;
-  border-color: #6b5a45;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-@media (max-width: 1200px) {
-  .hero-section {
-    flex-direction: column;
+@media (max-width: 1280px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+    min-height: auto;
   }
-  
-  .hero-right {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
+
+  .side-panels {
+    max-width: 620px;
   }
-  
-  .feature-cards {
-    grid-template-columns: repeat(2, 1fr);
+
+  .action-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .navbar {
-    padding: 0 16px;
+    grid-template-columns: 1fr;
+    justify-items: start;
+    gap: 16px;
+    padding: 18px 18px 12px;
   }
-  
+
   .nav-menu {
-    display: none;
-  }
-  
-  .content-wrapper {
-    padding: 0 16px;
-  }
-  
-  .hero-content {
-    padding: 32px;
-  }
-  
-  .hero-title {
-    font-size: 32px;
-  }
-  
-  .feature-cards {
-    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+    justify-content: space-between;
     gap: 12px;
+    overflow-x: auto;
   }
-  
-  .friends-header {
-    flex-direction: column;
-    align-items: flex-start;
+
+  .nav-user {
+    width: 100%;
+    justify-content: space-between;
   }
-  
-  .friends-list {
-    flex-wrap: wrap;
+
+  .lobby-shell {
+    padding: 18px 18px 24px;
   }
-  
+
+  .continue-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .action-row,
   .form-row {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 480px) {
-  .feature-cards {
+  .quick-item {
     grid-template-columns: 1fr;
+    align-items: start;
   }
-  
-  .adventure-info {
-    flex-direction: column;
+
+  .quick-actions {
+    align-items: stretch;
   }
-  
-  .adventure-cover {
-    width: 100%;
-    height: 100px;
+
+  .hero-title {
+    font-size: clamp(3.2rem, 15vw, 5.2rem);
   }
-  
-  .modal-content {
-    margin: 0 12px;
-    padding: 20px;
+
+  .hero-subtitle p {
+    letter-spacing: 0.32em;
+    font-size: 1.28rem;
+  }
+
+  .hero-text {
+    font-size: 1rem;
   }
 }
 </style>

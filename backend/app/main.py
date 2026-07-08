@@ -8,13 +8,16 @@ from backend.app.ai.services.llm_client import close_llm_client, init_llm_client
 from backend.app.api.v1.router import api_router
 from backend.app.core.config import settings
 from backend.app.core.exceptions import StoryForgeError
-from backend.app.db.init_db import init_db
+from backend.app.db.init_db import init_db, seed_demo_data
 from backend.app.schemas.api_response import error
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    if settings.DB_AUTO_CREATE:
+        init_db()
+    if settings.SEED_DEMO_DATA:
+        seed_demo_data()
     await init_llm_client()
     yield
     await close_llm_client()
