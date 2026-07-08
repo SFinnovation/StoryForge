@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.app.ai.schemas.character import CharacterCard, WorldContext
 
@@ -30,6 +30,20 @@ class OpeningOutput(BaseModel):
     npcs: list[OpeningNpc] = Field(default_factory=list)
     initial_clues: list[dict] = Field(default_factory=list)
     initial_facts: list[dict] = Field(default_factory=list)
+
+    @field_validator("initial_clues", "initial_facts", mode="before")
+    @classmethod
+    def _normalize_items(cls, value: object) -> list[dict]:
+        """兼容 LLM 返回字符串数组：将字符串项规范化为 dict。"""
+        if not isinstance(value, list):
+            return []
+        normalized: list[dict] = []
+        for item in value:
+            if isinstance(item, dict):
+                normalized.append(item)
+            elif isinstance(item, str) and item.strip():
+                normalized.append({"content": item.strip()})
+        return normalized
 
     @property
     def display_text(self) -> str:

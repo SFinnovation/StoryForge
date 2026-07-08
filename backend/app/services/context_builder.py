@@ -21,6 +21,7 @@ from backend.app.models.models import ActionCheck, Character, Clue, Fact, GameSe
 from backend.app.repositories import (ActionCheckRepo, ClueRepo, MessageRepo,
                                       SessionRepo)
 from backend.app.services.clue_pressure import CluePressureService
+from backend.app.services.content_ingestion_service import load_world_content_context
 from backend.app.services.memory_retriever import MemoryRetriever
 
 MESSAGE_LIMIT = int(os.getenv("AI_CONTEXT_MESSAGE_LIMIT", "20"))
@@ -46,6 +47,8 @@ class ActionContext:
     hidden_truths: list[str] = field(default_factory=list)
     npc_private_facts: list[str] = field(default_factory=list)
     visible_npcs: list[dict] = field(default_factory=list)
+    scenes: list[dict] = field(default_factory=list)
+    story_summary: str = ""
 
 
 def character_to_card(character: Character) -> CharacterCard:
@@ -201,14 +204,28 @@ class ContextBuilder:
 
 
 def build_for_opening(db: Session, world: World, character: Character) -> OpeningInput:
+    pack_ctx = load_world_content_context(db, world)
+    style = ""
+    public_facts: list[str] = []
+    seed_npcs = []
+    if pack_ctx["rulebook"]:
+        rb = pack_ctx["rulebook"]
+        style = rb.world_style
+        public_facts.extend([f.content for f in rb.public_world_facts])
+    if pack_ctx["module"]:
+        mod = pack_ctx["module"]
+        public_facts.extend(mod.public_world_facts)
+        seed_npcs = mod.seed_npcs
     return OpeningInput(
         world=WorldContext(
             name=world.name,
             description=world.description or "",
-            style=world.type or "",
+            style=style or world.type or "",
             opening_prompt=world.opening_prompt or "",
         ),
         character=character_to_card(character),
+        public_world_facts=public_facts,
+        seed_npcs=seed_npcs,
     )
 
 
@@ -247,22 +264,40 @@ def build_for_action(db: Session, session: GameSession) -> ActionContext:
         recent_summary = " | ".join(m.content[:80] for m in reversed(recent_msgs))
 
     memory = MemoryRetriever(db)
+    pack_ctx = load_world_content_context(db, world)
+
+    known_clues = [c.title for c in clues]
+    known_clues.extend(pack_ctx["player_known_clues"])
+    public_facts = [f.content for f in facts_public + facts_player]
+    public_facts.extend(pack_ctx["public_world_facts"])
+    hidden = [f.content for f in memory.get_hidden_truths(session.id)]
+    hidden.extend(pack_ctx["hidden_truths"])
+    npc_private = [f.content for f in memory.get_npc_private_facts(session.id)]
+    npc_private.extend(pack_ctx["npc_private_facts"])
+    visible_npcs = memory.get_visible_npcs(session.id, session.current_scene)
+    if not visible_npcs:
+        visible_npcs = pack_ctx["visible_npcs"]
+
+    scene_title = session.current_scene or pack_ctx["current_scene"] or world.name
+
     return ActionContext(
         world=WorldContext(
             name=world.name,
             description=world.description or "",
-            style=world.type or "",
+            style=(pack_ctx["rulebook"].world_style if pack_ctx["rulebook"] else "") or world.type or "",
             opening_prompt=world.opening_prompt or "",
         ),
         character=character_to_card(character),
-        current_scene=session.current_scene or world.name,
-        known_clues=[c.title for c in clues],
+        current_scene=scene_title,
+        known_clues=known_clues,
         clue_pressure=float(session.clue_pressure or 0.0),
-        recent_summary=recent_summary,
-        public_world_facts=[f.content for f in facts_public + facts_player],
-        hidden_truths=[f.content for f in memory.get_hidden_truths(session.id)],
-        npc_private_facts=[f.content for f in memory.get_npc_private_facts(session.id)],
-        visible_npcs=memory.get_visible_npcs(session.id, session.current_scene),
+        recent_summary=recent_summary or pack_ctx["story_summary"],
+        public_world_facts=public_facts,
+        hidden_truths=hidden,
+        npc_private_facts=npc_private,
+        visible_npcs=visible_npcs,
+        scenes=pack_ctx["scenes"],
+        story_summary=pack_ctx["story_summary"],
     )
 
 

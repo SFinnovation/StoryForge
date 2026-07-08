@@ -12,7 +12,9 @@
 - 世界观风格：{{world_style}}
 - 公开世界事实：{{public_world_facts}}
 - 当前场景：{{current_scene}}
+- 所有场景：{{scenes}}
 - 玩家角色卡：{{player_card}}
+- 所有剧情：{{story_summary}}
 - 最近剧情摘要：{{recent_summary}}
 - 玩家已知线索：{{player_known_clues}}
 - 可见 NPC：{{visible_npcs}}

@@ -5,8 +5,11 @@
   facts        <- world_public / hidden_truth / npc_private (allow_protected 通道)
   npc_profiles <- NPC 人格与知识边界
 
-模组数据按 worlds.name 匹配; 未收录的世界观(如自定义)不 seed, 不报错。
-幂等: FactRepo 不去重但本函数以"该会话已有 world_public"为已 seed 标志跳过。
+数据来源优先级:
+  1. worlds.adventure_module_id 关联的 AdventureModule 提取包（docx 导入）
+  2. MODULE_DATA 内置模组（按 worlds.name 匹配）
+未收录的世界观(如自定义)不 seed, 不报错。
+幂等: 以"该会话已有 world_public"为已 seed 标志跳过。
 """
 from sqlalchemy.orm import Session
 
@@ -66,6 +69,52 @@ MODULE_DATA: dict[str, dict] = {
 }
 
 
+def _module_from_pack(db: Session, world: World | None) -> dict | None:
+    """从 AdventureModule 提取包构造与 MODULE_DATA 同构的模组数据。"""
+    if world is None or not getattr(world, "adventure_module_id", None):
+        return None
+    from backend.app.services.content_pack_repository import get_adventure_module
+
+    module = get_adventure_module(db, world.adventure_module_id)
+    if module is None:
+        return None
+
+    scene = module.current_scene or None
+    facts: list[dict] = []
+    for content in module.public_world_facts + module.world_facts:
+        facts.append(dict(content=content, fact_type="world_public", related_scene=scene))
+    for content in module.hidden_truths:
+        facts.append(dict(content=content, fact_type="hidden_truth",
+                          importance="key", status="locked", related_scene=scene))
+    for content in module.player_known_clues:
+        facts.append(dict(content=content, fact_type="player_known", related_scene=scene))
+    for nf in module.npc_private_facts:
+        facts.append(dict(content=nf.content, fact_type="npc_private",
+                          importance=nf.importance,
+                          related_scene=nf.related_scene or scene))
+
+    npcs: list[dict] = []
+    for npc in module.visible_npcs:
+        npcs.append(dict(
+            npc_id=npc.npc_id,
+            name=npc.name,
+            personality=npc.personality or npc.description,
+            knowledge_scope=npc.knowledge_scope,
+            forbidden_knowledge=npc.forbidden_knowledge,
+            speaking_style=npc.speaking_style,
+            related_scene=npc.current_scene or scene,
+        ))
+    seen = {n["npc_id"] for n in npcs}
+    for npc in module.seed_npcs:
+        npc_id = npc.npc_id or f"npc_{npc.name}"
+        if npc_id in seen:
+            continue
+        npcs.append(dict(npc_id=npc_id, name=npc.name,
+                         personality=npc.description, related_scene=scene))
+
+    return {"facts": facts, "npcs": npcs}
+
+
 def seed_session_world_data(
     db: Session,
     session_id: int,
@@ -80,7 +129,11 @@ def seed_session_world_data(
     if session is None:
         raise ValueError(f"session {session_id} 不存在")
     world = db.get(World, session.world_id)
-    module = MODULE_DATA.get(world.name if world else "")
+
+    # 优先使用 docx 导入的 AdventureModule 提取包
+    module = _module_from_pack(db, world)
+    if module is None:
+        module = MODULE_DATA.get(world.name if world else "")
     if module is None:
         return {"facts": 0, "npcs": 0, "skipped": True}
 

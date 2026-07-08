@@ -1,9 +1,10 @@
 # StoryForge AI 模块 — 实现说明
 
-> **版本**：v1.0 · **更新**：2026-07-08  
-> **状态**：✅ MVP 已实现并接入后端  
+> **版本**：v1.1 · **更新**：2026-07-08  
+> **状态**：✅ MVP + 内容提取 Agent 已实现并接入后端  
 > **设计规格**：[ai-module-design.md](ai-module-design.md)  
-> **项目规格**：[implementation-spec.md](implementation-spec.md)
+> **项目规格**：[implementation-spec.md](implementation-spec.md)  
+> **知识引擎集成**：[akp-integration-plan.md](akp-integration-plan.md)（规则书 / 模组可审计检索，方案待实施）
 
 ---
 
@@ -28,7 +29,7 @@
 
 ## 1. 模块概览
 
-StoryForge AI 模块采用 **双 Agent + 修正循环** 架构，由 5 个专职 Agent 组成：
+StoryForge AI 模块采用 **双 Agent + 修正循环** 架构，由 **7 个专职 Agent** 组成：
 
 | Agent | 代码入口 | 触发时机 | 是否调用 LLM |
 |-------|----------|----------|--------------|
@@ -37,6 +38,8 @@ StoryForge AI 模块采用 **双 Agent + 修正循环** 架构，由 5 个专职
 | **NarrativeAgent** | `generate_narrative()` | 检定完成后 | 是 |
 | **CriticAgent** | 内嵌于 `RevisionLoop` | 每次叙事生成后 | 是 |
 | **SummaryAgent** | `generate_summary()` | 结束本局生成报告 | 是 |
+| **RulebookExtractorAgent** | `extract_rulebook()` | 导入 PHB 等规则书 docx | 是（map-reduce） |
+| **ModuleExtractorAgent** | `extract_module()` | 导入冒险模组 docx | 是 |
 
 **硬约束（已实现）**：
 
@@ -92,7 +95,24 @@ POST /sessions/{id}/report/generate
   → 写入 reports 表
 ```
 
-### 2.4 架构图
+### 2.4 内容导入流程（规则书 / 模组）
+
+```
+POST /api/v1/content/rulebook/extract
+POST /api/v1/content/module/extract
+  → content_ingestion_service.ingest_*_from_docx()
+  → docx_extractor.extract_text_from_docx()   # python-docx
+  → RulebookExtractorAgent / ModuleExtractorAgent
+  → content_pack_repository.save_*()          # rulebook_packs / adventure_modules
+  → link_*_to_world()                         # 更新 worlds 关联字段
+```
+
+开局与行动时，`context_builder` 通过 `load_world_content_context()` 自动合并规则书包与模组包：
+
+- 规则书 → `world_setting`、`world_style`、`public_world_facts`
+- 模组 → `scenes`、`current_scene`、`hidden_truths`、`story_summary`、`seed_npcs` 等
+
+### 2.5 架构图
 
 ```
 ┌──────────────┐     ┌─────────────────────────────────────────────┐
@@ -112,6 +132,8 @@ POST /sessions/{id}/report/generate
          │              │  NarrativeAgent │
          │              │  CriticAgent    │
          │              │  SummaryAgent   │
+         │              │  RulebookExtractor │
+         │              │  ModuleExtractor   │
          │              │  RevisionLoop   │
          │              └────────┬───────┘
          │                       │ LLMClient (httpx 连接池)
@@ -119,11 +141,13 @@ POST /sessions/{id}/report/generate
   state_committer ──────► SQLite (facts / messages / clues / ...)
   fact_repository
   world_seed
+  content_ingestion_service
+  content_pack_repository
 ```
 
 ---
 
-## 3. 五个 Agent 说明
+## 3. Agent 说明
 
 ### 3.1 OpeningAgent — 开局剧情生成
 
@@ -219,6 +243,26 @@ narration = result.output.display_text
 | **Prompt** | `backend/app/ai/prompts/report.txt` |
 | **触发** | `POST /sessions/{id}/report/generate` |
 
+### 3.6 RulebookExtractorAgent — 规则书提取
+
+| 项 | 说明 |
+|----|------|
+| **输入** | `RulebookExtractionInput`：docx 纯文本 + `focus`（如 `lite_dnd`） |
+| **输出** | `AgentResult[RulebookExtractionOutput]`：`world_setting`、`world_style`、`public_world_facts`、`core_rules_summary` |
+| **Prompt** | `rulebook_extractor.txt`（分块 map）+ `rulebook_consolidate.txt`（合并） |
+| **策略** | 大文档（如 PHB 47 万字符）先 `select_rulebook_sections()` 筛选，再 `chunk_text(6000)` 最多 6 块 map-reduce |
+| **落库** | `rulebook_packs` 表，通过 `worlds.rulebook_pack_id` 关联 |
+
+### 3.7 ModuleExtractorAgent — 模组提取
+
+| 项 | 说明 |
+|----|------|
+| **输入** | `ModuleExtractionInput`：docx 纯文本 + `module_title` |
+| **输出** | `AgentResult[ModuleExtractionOutput]`：`scenes`、`current_scene`、`hidden_truths`、`story_summary`、`world_facts`、`public_world_facts`、`player_known_clues`、`npc_private_facts`、`visible_npcs`、`seed_npcs` |
+| **Prompt** | `module_extractor.txt` |
+| **策略** | 截断至 18000 字符后单次 LLM 提取 |
+| **落库** | `adventure_modules` 表，通过 `worlds.adventure_module_id` 关联；开局时 `world_seed` 写入 session 级 facts / npc_profiles |
+
 ---
 
 ## 4. 目录与文件结构
@@ -236,6 +280,8 @@ backend/app/ai/
 │   ├── narrative.py            # NarrativeInput / NarrativeOutput / CheckResult
 │   ├── critic.py               # CriticOutput / CriticScores
 │   ├── summary.py              # SummaryInput / SummaryOutput
+│   ├── rulebook_extract.py     # RulebookExtractionInput / Output
+│   ├── module_extract.py       # ModuleExtractionInput / Output
 │   ├── agent_result.py         # AgentResult[T] 统一包装（含 metrics）
 │   ├── narrative_output.schema.json
 │   └── critic_output.schema.json
@@ -246,6 +292,10 @@ backend/app/ai/
 │   ├── narrative_agent.py
 │   ├── critic_agent.py
 │   ├── summary_agent.py
+│   ├── rulebook_extractor_agent.py
+│   ├── module_extractor_agent.py
+│   ├── docx_extractor.py       # docx → 纯文本
+│   ├── text_chunker.py         # 规则书分块与关键词筛选
 │   ├── revision_loop.py        # Narrative + Critic 修正循环
 │   ├── llm_client.py           # OpenAI 兼容客户端（连接池复用）
 │   ├── prompt_loader.py        # Prompt 模板加载（带缓存）
@@ -258,6 +308,9 @@ backend/app/ai/
     ├── narrative_agent.txt
     ├── critic_agent.txt
     ├── report.txt
+    ├── rulebook_extractor.txt
+    ├── rulebook_consolidate.txt
+    ├── module_extractor.txt
     └── fallback_narration.txt  # Critic 多次失败后兜底叙事
 ```
 
@@ -273,7 +326,9 @@ backend/app/ai/
 | `memory_retriever.py` | 读取 Fact / NPC Profile |
 | `fact_repository.py` | 写入 AI 返回的 new_facts |
 | `state_committer.py` | 校验后落库 |
-| `world_seed.py` | 开局 seed 模组数据 |
+| `world_seed.py` | 开局 seed 模组数据（优先 AdventureModule） |
+| `content_ingestion_service.py` | docx → Agent → DB 编排 |
+| `content_pack_repository.py` | 规则书包 / 模组包 CRUD |
 | `rule_service.py` | D&D 5e 检定（非 LLM） |
 | `clue_pressure.py` | 剧情推进压力计算 |
 
@@ -384,6 +439,10 @@ Base URL：`/api/v1` · 响应格式：`{ "code": 0, "message": "ok", "data": { 
 | POST | `/sessions/{id}/action` | ActionParser + Narrative + Critic |
 | POST | `/sessions/{id}/end` | — |
 | POST | `/sessions/{id}/report/generate` | SummaryAgent |
+| POST | `/content/rulebook/extract` | RulebookExtractorAgent |
+| POST | `/content/module/extract` | ModuleExtractorAgent |
+| GET | `/content/rulebook/{pack_id}` | —（读持久化结果） |
+| GET | `/content/module/{module_id}` | —（读持久化结果） |
 | GET | `/sessions/{id}/messages` | —（读持久化结果） |
 | GET | `/sessions/{id}/meta` | clue_pressure |
 | GET | `/sessions/{id}/facts?scope=player_known` | Fact 分层 |
@@ -585,6 +644,9 @@ python scripts/verify_ai_db_interaction.py
 # FastAPI 行动接口集成
 python scripts/test_action_api.py
 
+# 规则书/模组 docx 提取（需服务器可访问 file_path）
+python scripts/test_content_extract.py
+
 # 接口性能基准（mock 路径）
 python scripts/bench_ai_module.py
 ```
@@ -595,6 +657,7 @@ python scripts/bench_ai_module.py
 | `verify_implementation_spec.py` | 文档 §8 完整闭环 |
 | `verify_ai_db_interaction.py` | DB 读写、Fact 分层、NPC Profile |
 | `test_action_api.py` | HTTP API 响应结构 |
+| `test_content_extract.py` | PHB + 追捕克仑可 docx 提取 + 开局行动闭环 |
 | `bench_ai_module.py` | 接口层开销（mock < 0.05ms） |
 
 ---
@@ -617,7 +680,10 @@ python scripts/bench_ai_module.py
 | Rule Engine | §3.2 | `rule_service.py` | ✅ |
 | AIModule 门面 | §9 | `orchestrator.py` | ✅ |
 | action 编排 | §9.2 | `action_service.py` | ✅ |
-| 开局 seed | §9.3 | `world_seed.py` | ✅ |
+| 开局 seed | §9.3 | `world_seed.py` | ✅（支持 AdventureModule） |
+| RulebookExtractor | — | `rulebook_extractor_agent.py` | ✅ |
+| ModuleExtractor | — | `module_extractor_agent.py` | ✅ |
+| Content Ingestion API | — | `api/v1/content.py` | ✅ |
 | Opening Critic | §9.3 P1 | — | ⏳ 未实现 |
 | 流式输出 SSE | P3 | — | ⏳ 未实现 |
 | JWT 认证 | P0 其他组 | demo user_id=1 | ⏳ 占位 |
@@ -642,6 +708,7 @@ python scripts/bench_ai_module.py
 - [ ] 完整 `skills_json` 角色创建对接
 - [ ] Critic 独立小模型（`AI_CRITIC_MODEL`）调优
 - [ ] 前端 SSE 流式叙事
+- [ ] 接入 Auditable Knowledge Packs 作为规则书 / 模组底层知识引擎，见 [akp-integration-plan.md](akp-integration-plan.md)
 
 ---
 

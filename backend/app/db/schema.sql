@@ -41,13 +41,13 @@ CREATE TABLE IF NOT EXISTS worlds (
     created_by     INTEGER REFERENCES users(id),
     is_public      INTEGER DEFAULT 1 CHECK (is_public IN (0, 1)),
     is_enabled     INTEGER DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+    rulebook_pack_id    INTEGER REFERENCES rulebook_packs(id),
+    adventure_module_id INTEGER REFERENCES adventure_modules(id),
     created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ------------------------------------------------------------
--- 3. 角色（D&D 5e 字段整合）
---    race_id / class_id / background_id 对应 rules/dnd5e/*.json 的 id
---    skills_json 例: {"ste":{"proficient":true}}  键为 skills.json 的技能键
+-- 3. 世界观模组
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS world_modules (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +59,49 @@ CREATE TABLE IF NOT EXISTS world_modules (
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ------------------------------------------------------------
+-- 4. 内容导入包（规则书 / 冒险模组）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS rulebook_packs (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    title                   TEXT NOT NULL,
+    source_filename         TEXT,
+    world_setting           TEXT NOT NULL,
+    world_style             TEXT NOT NULL,
+    public_world_facts_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(public_world_facts_json)),
+    core_rules_summary      TEXT,
+    extraction_notes        TEXT,
+    knowledge_pack_dir      TEXT,
+    status                  TEXT NOT NULL DEFAULT 'active',
+    created_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS adventure_modules (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    title                   TEXT NOT NULL,
+    source_filename         TEXT,
+    story_summary           TEXT NOT NULL,
+    opening_prompt          TEXT NOT NULL,
+    scenes_json             TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(scenes_json)),
+    current_scene           TEXT NOT NULL,
+    hidden_truths_json      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(hidden_truths_json)),
+    world_facts_json        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(world_facts_json)),
+    public_world_facts_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(public_world_facts_json)),
+    player_known_clues_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(player_known_clues_json)),
+    npc_private_facts_json  TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(npc_private_facts_json)),
+    visible_npcs_json       TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(visible_npcs_json)),
+    seed_npcs_json          TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(seed_npcs_json)),
+    extraction_notes        TEXT,
+    knowledge_pack_dir      TEXT,
+    status                  TEXT NOT NULL DEFAULT 'active',
+    created_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ------------------------------------------------------------
+-- 5. 角色（D&D 5e 字段整合）
+--    race_id / class_id / background_id 对应 rules/dnd5e/*.json 的 id
+--    skills_json 例: {"ste":{"proficient":true}}  键为 skills.json 的技能键
+-- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS characters (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id            INTEGER NOT NULL REFERENCES users(id),
@@ -86,7 +129,7 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 
 -- ------------------------------------------------------------
--- 4. 跑团会话
+-- 6. 跑团会话
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS game_sessions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +152,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
 );
 
 -- ------------------------------------------------------------
--- 5. 消息日志
+-- 7. 消息日志
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,7 +171,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- ------------------------------------------------------------
--- 6. 行动判定
+-- 8. 行动判定
 --    skill_key 对应 rules/dnd5e/skills.json 的键 (如 ste)
 --    attribute_used 对应 abilities.json 的 key (如 dexterity)
 -- ------------------------------------------------------------
@@ -152,7 +195,7 @@ CREATE TABLE IF NOT EXISTS action_checks (
 );
 
 -- ------------------------------------------------------------
--- 7. 线索
+-- 9. 线索
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS clues (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,7 +209,7 @@ CREATE TABLE IF NOT EXISTS clues (
 );
 
 -- ------------------------------------------------------------
--- 8. 任务
+-- 10. 任务
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS tasks (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,7 +223,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 -- ------------------------------------------------------------
--- 9. 结局报告（与 session 一对一）
+-- 11. 结局报告（与 session 一对一）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS reports (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,6 +262,10 @@ CREATE INDEX IF NOT EXISTS idx_characters_user       ON characters(user_id);
 CREATE INDEX IF NOT EXISTS idx_world_modules_world_enabled ON world_modules(world_id, is_enabled);
 CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_created    ON admin_operation_logs(admin_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_logs_target           ON admin_operation_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_worlds_rulebook_pack        ON worlds(rulebook_pack_id);
+CREATE INDEX IF NOT EXISTS idx_worlds_adventure_module     ON worlds(adventure_module_id);
+CREATE INDEX IF NOT EXISTS idx_rulebook_packs_status       ON rulebook_packs(status);
+CREATE INDEX IF NOT EXISTS idx_adventure_modules_status    ON adventure_modules(status);
 
 -- ============================================================
 -- §11 AI 模块扩展表 (依据 ai-module-design.md §4 / §6.5 / §11.2)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ORM 模型 — 与 schema.sql 一一对应的 12 张表 (9 基础 + 3 AI 扩展)
+"""ORM 模型 — 与 schema.sql 一一对应的数据库表定义
 
 约定:
 - 静态 D&D 5e 规则存于 rules/dnd5e/*.json, 不入库
@@ -53,6 +53,9 @@ class World(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     is_public: Mapped[int] = mapped_column(Integer, default=1)
     is_enabled: Mapped[int] = mapped_column(Integer, default=1)
+    # ---- 内容提取包关联 (docs/ai-module-implementation §3.6/§3.7) ----
+    rulebook_pack_id: Mapped[int | None] = mapped_column(ForeignKey("rulebook_packs.id"))
+    adventure_module_id: Mapped[int | None] = mapped_column(ForeignKey("adventure_modules.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     modules: Mapped[list["WorldModule"]] = relationship(back_populates="world")
@@ -60,7 +63,6 @@ class World(Base):
     __table_args__ = (
         CheckConstraint("type IN ('fantasy','mystery','cyberpunk','custom')", name="ck_worlds_type"),
     )
-
 
 class WorldModule(Base):
     __tablename__ = "world_modules"
@@ -78,6 +80,49 @@ class WorldModule(Base):
     __table_args__ = (
         CheckConstraint("is_enabled IN (0, 1)", name="ck_world_modules_enabled"),
     )
+
+
+class RulebookPack(Base):
+    """从 PHB 等规则书 docx 提取的标准化规则包 (RulebookExtractorAgent 落库)。"""
+
+    __tablename__ = "rulebook_packs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_filename: Mapped[str | None] = mapped_column(String(255))
+    world_setting: Mapped[str] = mapped_column(Text, nullable=False)
+    world_style: Mapped[str] = mapped_column(Text, nullable=False)
+    public_world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    core_rules_summary: Mapped[str | None] = mapped_column(Text)
+    extraction_notes: Mapped[str | None] = mapped_column(Text)
+    knowledge_pack_dir: Mapped[str | None] = mapped_column(String(500))  # AKP skill 包目录
+    status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AdventureModule(Base):
+    """从冒险模组 docx 提取的结构化内容包 (ModuleExtractorAgent 落库)。"""
+
+    __tablename__ = "adventure_modules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_filename: Mapped[str | None] = mapped_column(String(255))
+    story_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    opening_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    scenes_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    current_scene: Mapped[str] = mapped_column(String(200), nullable=False)
+    hidden_truths_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    public_world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    player_known_clues_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    npc_private_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    visible_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    seed_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    extraction_notes: Mapped[str | None] = mapped_column(Text)
+    knowledge_pack_dir: Mapped[str | None] = mapped_column(String(500))  # AKP skill 包目录
+    status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Character(Base):

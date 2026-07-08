@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""初始化建表 — 基于 ORM 元数据创建全部 12 张表与索引
+"""初始化建表 — 基于 ORM 元数据创建全部表与索引
 
 用法:
     python -m app.db.init_db          # 建表(已存在则跳过)
@@ -25,6 +25,10 @@ INDEXES = [
     Index("idx_world_modules_world_enabled", models.WorldModule.world_id, models.WorldModule.is_enabled),
     Index("idx_admin_logs_admin_created", models.AdminOperationLog.admin_id, models.AdminOperationLog.created_at),
     Index("idx_admin_logs_target", models.AdminOperationLog.target_type, models.AdminOperationLog.target_id),
+    Index("idx_worlds_rulebook_pack", models.World.rulebook_pack_id),
+    Index("idx_worlds_adventure_module", models.World.adventure_module_id),
+    Index("idx_rulebook_packs_status", models.RulebookPack.status),
+    Index("idx_adventure_modules_status", models.AdventureModule.status),
     # ---- AI 模块扩展表 (ai-module-design §11) ----
     # memory_retriever 按会话+类型取 Fact; context_builder 按场景取可见 NPC
     Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
@@ -37,15 +41,24 @@ DEMO_USER_ID = 1
 
 def _ensure_legacy_columns() -> None:
     inspector = inspect(engine)
-    if "users" not in inspector.get_table_names():
+    table_names = set(inspector.get_table_names())
+    if "users" not in table_names:
         return
 
-    user_columns = {column["name"] for column in inspector.get_columns("users")}
     statements: list[str] = []
+
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
     if "email" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
     if "status" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active'")
+
+    if "worlds" in table_names:
+        world_columns = {column["name"] for column in inspector.get_columns("worlds")}
+        if "rulebook_pack_id" not in world_columns:
+            statements.append("ALTER TABLE worlds ADD COLUMN rulebook_pack_id INTEGER")
+        if "adventure_module_id" not in world_columns:
+            statements.append("ALTER TABLE worlds ADD COLUMN adventure_module_id INTEGER")
 
     if not statements:
         return

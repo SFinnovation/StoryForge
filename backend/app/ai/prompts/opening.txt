@@ -12,12 +12,12 @@
 - 公开事实：{{public_world_facts}}
 - 初始 NPC 列表：{{seed_npcs}}
 
-输出 JSON：
+输出 JSON（initial_clues / initial_facts 的每一项必须是对象，不能是纯字符串）：
 {
   "scene_title": "场景标题",
   "narration": "开局旁白",
   "main_task": "主任务描述",
   "npcs": [{"npc_id":"","name":"","description":""}],
-  "initial_clues": [],
-  "initial_facts": []
+  "initial_clues": [{"title":"","content":"","importance":"normal"}],
+  "initial_facts": [{"content":"","fact_type":"world_public"}]
 }
