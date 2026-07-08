@@ -34,6 +34,49 @@ class World(Base):
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"))
     is_public: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_active: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    rulebook_pack_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("rulebook_packs.id"))
+    adventure_module_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("adventure_modules.id"))
+    created_at: Mapped[str | None] = mapped_column(String)
+
+
+class RulebookPack(Base):
+    """从 PHB 等规则书 docx 提取的标准化规则包。"""
+
+    __tablename__ = "rulebook_packs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    source_filename: Mapped[str | None] = mapped_column(String)
+    world_setting: Mapped[str] = mapped_column(Text, nullable=False)
+    world_style: Mapped[str] = mapped_column(Text, nullable=False)
+    public_world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    core_rules_summary: Mapped[str | None] = mapped_column(Text)
+    extraction_notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="active", nullable=False)
+    created_at: Mapped[str | None] = mapped_column(String)
+
+
+class AdventureModule(Base):
+    """从冒险模组 docx 提取的结构化内容包。"""
+
+    __tablename__ = "adventure_modules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    source_filename: Mapped[str | None] = mapped_column(String)
+    story_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    opening_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    scenes_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    current_scene: Mapped[str] = mapped_column(String, nullable=False)
+    hidden_truths_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    public_world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    player_known_clues_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    npc_private_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    visible_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    seed_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    extraction_notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="active", nullable=False)
     created_at: Mapped[str | None] = mapped_column(String)
 
 

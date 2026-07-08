@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.ai.schemas.character import CharacterCard, WorldContext
 from app.ai.schemas.opening import OpeningInput
 from app.models.game import Character, Clue, Fact, GameSession, Message, World
+from app.services.content_ingestion_service import load_world_content_context
 from app.services.memory_retriever import (
     get_hidden_truths,
     get_npc_private_facts,
@@ -28,6 +29,8 @@ class ActionContext:
     hidden_truths: list[str] = field(default_factory=list)
     npc_private_facts: list[str] = field(default_factory=list)
     visible_npcs: list[dict] = field(default_factory=list)
+    scenes: list[dict] = field(default_factory=list)
+    story_summary: str = ""
 
 
 def character_to_card(character: Character) -> CharacterCard:
@@ -40,13 +43,28 @@ def character_to_card(character: Character) -> CharacterCard:
 
 
 def build_for_opening(db: Session, world: World, character: Character) -> OpeningInput:
+    pack_ctx = load_world_content_context(db, world)
+    style = ""
+    public_facts: list[str] = []
+    seed_npcs = []
+    if pack_ctx["rulebook"]:
+        rb = pack_ctx["rulebook"]
+        style = rb.world_style
+        public_facts.extend([f.content for f in rb.public_world_facts])
+    if pack_ctx["module"]:
+        mod = pack_ctx["module"]
+        public_facts.extend(mod.public_world_facts)
+        seed_npcs = mod.seed_npcs
     return OpeningInput(
         world=WorldContext(
             name=world.name,
             description=world.description,
+            style=style,
             opening_prompt=world.opening_prompt,
         ),
         character=character_to_card(character),
+        public_world_facts=public_facts,
+        seed_npcs=seed_npcs,
     )
 
 
@@ -93,21 +111,40 @@ def build_for_action(db: Session, session: GameSession) -> ActionContext:
     if not recent_summary and recent_msgs:
         recent_summary = " | ".join(m.content[:80] for m in reversed(recent_msgs))
 
+    pack_ctx = load_world_content_context(db, world)
+    public_facts = list(public_facts)
+    public_facts.extend(pack_ctx["public_world_facts"])
+    hidden = list(hidden)
+    hidden.extend(pack_ctx["hidden_truths"])
+    npc_private = list(npc_private)
+    npc_private.extend(pack_ctx["npc_private_facts"])
+    if not visible_npcs:
+        visible_npcs = pack_ctx["visible_npcs"]
+    known_clues = list(known_clues)
+    known_clues.extend(pack_ctx["player_known_clues"])
+
+    scene_title = session.current_scene or pack_ctx["current_scene"] or world.name
+    if pack_ctx["module"] and not session.current_scene:
+        scene_title = pack_ctx["module"].current_scene
+
     return ActionContext(
         world=WorldContext(
             name=world.name,
             description=world.description,
+            style=pack_ctx["rulebook"].world_style if pack_ctx["rulebook"] else "",
             opening_prompt=world.opening_prompt,
         ),
         character=character_to_card(character),
-        current_scene=session.current_scene or world.name,
+        current_scene=scene_title,
         known_clues=known_clues,
         clue_pressure=float(session.clue_pressure or 0.0),
-        recent_summary=recent_summary,
-        public_world_facts=public_facts + player_facts,
+        recent_summary=recent_summary or pack_ctx["story_summary"],
+        public_world_facts=public_facts,
         hidden_truths=hidden,
         npc_private_facts=npc_private,
         visible_npcs=visible_npcs,
+        scenes=pack_ctx["scenes"],
+        story_summary=pack_ctx["story_summary"],
     )
 
 

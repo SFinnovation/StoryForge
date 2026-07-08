@@ -11,6 +11,8 @@ from app.ai.schemas.narrative import (
     StateUpdates,
 )
 from app.ai.schemas.opening import OpeningInput, OpeningOutput
+from app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
+from app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
 from app.ai.schemas.summary import SummaryInput, SummaryOutput
 
 __all__ = [
@@ -22,12 +24,16 @@ __all__ = [
     "CheckResult",
     "CriticOutput",
     "CriticScores",
+    "ModuleExtractionInput",
+    "ModuleExtractionOutput",
     "NarrativeInput",
     "NarrativeOutput",
     "NarrativeWithReviewResult",
     "NewClue",
     "OpeningInput",
     "OpeningOutput",
+    "RulebookExtractionInput",
+    "RulebookExtractionOutput",
     "StateUpdates",
     "SummaryInput",
     "SummaryOutput",

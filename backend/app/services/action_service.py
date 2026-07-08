@@ -88,6 +88,8 @@ async def handle_action(
             recent_summary=ctx.recent_summary,
             public_world_facts=ctx.public_world_facts,
             visible_npcs=ctx.visible_npcs,
+            scenes=ctx.scenes,
+            story_summary=ctx.story_summary,
         ),
         hidden_truths=ctx.hidden_truths,
         npc_private_facts=ctx.npc_private_facts,

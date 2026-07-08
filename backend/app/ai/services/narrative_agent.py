@@ -39,6 +39,8 @@ class NarrativeAgent:
             recent_summary=data.recent_summary or "（无）",
             player_known_clues=dumps_context(data.known_clues),
             visible_npcs=dumps_context(data.visible_npcs),
+            scenes=dumps_context(data.scenes),
+            story_summary=data.story_summary or data.recent_summary or "（无）",
             player_action=data.player_action,
             rule_result=dumps_context(data.check_result or {"needs_check": False}),
             clue_pressure=str(data.clue_pressure),

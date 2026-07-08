@@ -53,6 +53,8 @@ class NarrativeInput(BaseModel):
     recent_summary: str = ""
     visible_npcs: list[dict] = Field(default_factory=list)
     public_world_facts: list[str] = Field(default_factory=list)
+    scenes: list[dict] = Field(default_factory=list)
+    story_summary: str = ""
     revision_instructions: list[str] = Field(default_factory=list)
     previous_narration: str | None = None
 

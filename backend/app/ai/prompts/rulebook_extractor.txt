@@ -1,0 +1,27 @@
+你是 StoryForge RulebookExtractorAgent。任务：从 D&D 规则书文本中提取、压缩、标准化为跑团 AI 可用的世界观与规则摘要。
+
+约束：
+1. 只输出 JSON，无 markdown 代码块外内容
+2. 面向「轻量 d20 跑团」场景，忽略职业升级树、完整法术列表、装备详表
+3. 保留：属性检定、技能、优势劣势、休息、死亡豁免、社交/探索/战斗基础流程
+4. public_world_facts 应是玩家与 AI 可公开引用的设定事实，每条一句，不超过 20 条
+5. world_setting 控制在 800 字以内，world_style 控制在 200 字以内
+6. 中文输出
+
+输入：
+- 来源：{{source_name}}
+- 提取焦点：{{focus}}
+- 文本片段（可能为长文档的一部分）：
+{{text_chunk}}
+
+输出 JSON：
+{
+  "title": "规则书标题",
+  "world_setting": "战役/世界设定与基调摘要",
+  "world_style": "叙事风格与 DM 指引",
+  "public_world_facts": [
+    {"content": "事实描述", "importance": "normal|important|key", "category": "规则|世界|社交|战斗"}
+  ],
+  "core_rules_summary": "核心 d20 检定与战斗规则压缩摘要",
+  "extraction_notes": "本片段覆盖范围或遗漏说明"
+}
