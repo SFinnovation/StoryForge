@@ -1,22 +1,12 @@
-<script setup>
-import { computed, reactive, ref } from 'vue'
-import loginBackground from '../背景/login界面.png'
-import productIcon from '../图标/产品图标.png'
-
-const emit = defineEmits(['enter'])
-
-const STORAGE_KEY = 'storyforge_auth_users'
-const SESSION_KEY = 'storyforge_auth_session'
+﻿<script setup>
+import { ref, reactive } from 'vue'
 
 const isLogin = ref(true)
-const showPassword = ref(false)
-const authError = ref('')
-const authMessage = ref('')
 
 const loginForm = reactive({
   username: '',
   password: '',
-  remember: true
+  remember: false
 })
 
 const registerForm = reactive({
@@ -26,690 +16,783 @@ const registerForm = reactive({
   confirmPassword: ''
 })
 
-const rememberedUser = ref(localStorage.getItem(SESSION_KEY) || '')
-
-const menuItems = computed(() => [
-  {
-    label: '登录',
-    desc: '进入灵境档案',
-    active: isLogin.value,
-    action: () => switchMode(true)
-  },
-  {
-    label: '注册',
-    desc: '创建新账号',
-    active: !isLogin.value,
-    action: () => switchMode(false)
-  },
-  {
-    label: '游客进入',
-    desc: '先体验大厅',
-    active: false,
-    action: handleGuestEnter
-  },
-  {
-    label: '继续上次冒险',
-    desc: '读取最近会话',
-    active: false,
-    action: handleGuestEnter
-  }
-])
-
-const getUsers = () => {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-const saveUsers = (users) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(users))
-}
-
-const switchMode = (loginMode) => {
-  isLogin.value = loginMode
-  authError.value = ''
-  authMessage.value = ''
-}
-
-const handleGuestEnter = () => {
-  authError.value = ''
-  authMessage.value = '已以游客身份进入。'
-  emit('enter')
-}
-
 const handleLogin = () => {
-  authError.value = ''
-  const users = getUsers()
-  const matchedUser = users.find(
-    (user) => user.username === loginForm.username && user.password === loginForm.password
-  )
-
-  if (!matchedUser) {
-    authError.value = '账号或密码不正确。'
-    return
-  }
-
-  if (loginForm.remember) {
-    localStorage.setItem(SESSION_KEY, loginForm.username)
-  } else {
-    localStorage.removeItem(SESSION_KEY)
-  }
-
-  rememberedUser.value = loginForm.username
-  authMessage.value = `欢迎回来，${matchedUser.nickname || matchedUser.username}。`
-  emit('enter')
+  console.log('登录数据:', { ...loginForm })
 }
 
 const handleRegister = () => {
-  authError.value = ''
-
-  if (!registerForm.nickname || !registerForm.username || !registerForm.password) {
-    authError.value = '请完整填写注册信息。'
-    return
-  }
-
   if (registerForm.password !== registerForm.confirmPassword) {
-    authError.value = '两次输入的密码不一致。'
+    alert('两次输入的密码不一致')
     return
   }
-
-  const users = getUsers()
-  if (users.some((user) => user.username === registerForm.username)) {
-    authError.value = '该账号已存在。'
-    return
-  }
-
-  users.push({
-    nickname: registerForm.nickname,
-    username: registerForm.username,
-    password: registerForm.password
-  })
-  saveUsers(users)
-
-  localStorage.setItem(SESSION_KEY, registerForm.username)
-  rememberedUser.value = registerForm.username
-  authMessage.value = '注册成功，已自动进入大厅。'
-  emit('enter')
+  console.log('注册数据:', { ...registerForm })
 }
 
-if (rememberedUser.value) {
-  loginForm.username = rememberedUser.value
-}
+const features = [
+  { name: 'AI 主持', desc: '智能 DM 驱动叙事' },
+  { name: '角色档案', desc: '完整角色成长记录' },
+  { name: '行动判定', desc: 'D20 骰子精准裁决' },
+  { name: '灵境卷宗', desc: '无限故事世界探索' }
+]
 </script>
 
 <template>
-  <div class="login-stage">
-    <div class="login-backdrop">
-      <img class="backdrop-image" :src="loginBackground" alt="登录背景" />
-      <div class="backdrop-vignette"></div>
-      <div class="magic-overlay"></div>
-      <div class="orb-container">
-        <div class="orb-glow"></div>
-        <div class="orb-ring orb-ring-1"></div>
-        <div class="orb-ring orb-ring-2"></div>
-        <div class="orb-ring orb-ring-3"></div>
-        <div class="orb-core"></div>
+  <div class="auth-page">
+    <div class="auth-bg">
+      <div class="bg-overlay"></div>
+    </div>
+
+    <div class="auth-content">
+      <div class="brand-section">
+        <div class="brand-inner">
+          <div class="brand-logo">
+            <div class="d20-icon">
+              <span class="d20-number">20</span>
+            </div>
+          </div>
+          <h1 class="brand-title">StoryForge</h1>
+          <h2 class="brand-subtitle">灵境档案</h2>
+          <p class="brand-slogan">
+            AI 掌卷人已启封灵境卷宗，掷下命运之骰，开启你的跑团冒险。
+          </p>
+          <div class="features">
+            <div
+              v-for="(feature, index) in features"
+              :key="index"
+              class="feature-item"
+            >
+              <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path v-if="index === 0" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                  <path v-else-if="index === 1" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                  <path v-else-if="index === 2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  <path v-else d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                </svg>
+              </div>
+              <div class="feature-text">
+                <span class="feature-name">{{ feature.name }}</span>
+                <span class="feature-desc">{{ feature.desc }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="auth-card">
+          <div class="card-glow"></div>
+          <div class="card-border"></div>
+          
+          <div class="card-header">
+            <div class="tabs">
+              <button
+                class="tab-btn"
+                :class="{ active: isLogin }"
+                @click="isLogin = true"
+              >
+                <span class="tab-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M22 21v-2a4 4 0 00-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 010 7.75"/>
+                  </svg>
+                </span>
+                <span>登录</span>
+              </button>
+              <button
+                class="tab-btn"
+                :class="{ active: !isLogin }"
+                @click="isLogin = false"
+              >
+                <span class="tab-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0z"/>
+                  </svg>
+                </span>
+                <span>注册</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <form v-if="isLogin" @submit.prevent="handleLogin" class="auth-form">
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                  </svg>
+                  <span>账号</span>
+                </label>
+                <input
+                  v-model="loginForm.username"
+                  type="text"
+                  class="form-input"
+                  placeholder="请输入账号"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                  <span>密码</span>
+                </label>
+                <input
+                  v-model="loginForm.password"
+                  type="password"
+                  class="form-input"
+                  placeholder="请输入密码"
+                  required
+                />
+              </div>
+              <div class="form-options">
+                <label class="checkbox-label">
+                  <input
+                    v-model="loginForm.remember"
+                    type="checkbox"
+                    class="form-checkbox"
+                  />
+                  <span class="checkbox-custom"></span>
+                  <span>记住我</span>
+                </label>
+                <button type="button" class="forgot-link">忘记密码？</button>
+              </div>
+              <button type="submit" class="submit-btn login-btn">
+                <span>进入灵境</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14"/>
+                  <path d="M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </form>
+
+            <form v-else @submit.prevent="handleRegister" class="auth-form">
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                  </svg>
+                  <span>昵称</span>
+                </label>
+                <input
+                  v-model="registerForm.nickname"
+                  type="text"
+                  class="form-input"
+                  placeholder="请输入昵称"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  <span>账号</span>
+                </label>
+                <input
+                  v-model="registerForm.username"
+                  type="text"
+                  class="form-input"
+                  placeholder="请输入账号"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                  <span>密码</span>
+                </label>
+                <input
+                  v-model="registerForm.password"
+                  type="password"
+                  class="form-input"
+                  placeholder="请输入密码"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0110 0v4"/>
+                  </svg>
+                  <span>确认密码</span>
+                </label>
+                <input
+                  v-model="registerForm.confirmPassword"
+                  type="password"
+                  class="form-input"
+                  placeholder="请再次输入密码"
+                  required
+                />
+              </div>
+              <button type="submit" class="submit-btn register-btn">
+                <span>创建卷宗</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+            </form>
+          </div>
+
+          <div class="card-footer">
+            <span v-if="isLogin">还没有灵境档案？</span>
+            <span v-else>已有灵境档案？</span>
+            <button type="button" class="switch-link" @click="isLogin = !isLogin">
+              {{ isLogin ? '立即注册' : '返回登录' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="login-panel">
-      <div class="brand-section">
-        <img class="brand-icon" :src="productIcon" alt="StoryForge 产品图标" />
-        <p class="brand-kicker">StoryForge Archives</p>
-        <h1 class="brand-title">灵境档案</h1>
-        <p class="brand-copy">
-          AI 掌卷人已启封灵境卷宗，与你共赴冒险。
-        </p>
-      </div>
-
-      <nav class="menu-section">
-        <button
-          v-for="item in menuItems"
-          :key="item.label"
-          type="button"
-          class="menu-item"
-          :class="{ active: item.active }"
-          @click="item.action?.()"
-        >
-          <span class="menu-item-icon">
-            <svg v-if="item.label === '登录'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
-            </svg>
-            <svg v-else-if="item.label === '注册'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M18 9v3a3 3 0 006 0v-3M13 19h7a3 3 0 003-3v-8a3 3 0 00-3-3h-7a4 4 0 00-4 4v11a3 3 0 003 3z"/>
-            </svg>
-            <svg v-else-if="item.label === '游客进入'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-              <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </span>
-          <span class="menu-item-label">{{ item.label }}</span>
-          <span class="menu-item-desc">{{ item.desc }}</span>
-        </button>
-      </nav>
-
-      <section class="form-section">
-        <form v-if="isLogin" class="auth-form" @submit.prevent="handleLogin">
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-            </span>
-            <input v-model="loginForm.username" type="text" placeholder="用户名 / 邮箱" required />
-          </label>
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-            </span>
-            <div class="password-row">
-              <input
-                v-model="loginForm.password"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="密码"
-                required
-              />
-              <button type="button" class="eye-btn" @click="showPassword = !showPassword">
-                {{ showPassword ? '隐藏' : '显示' }}
-              </button>
-            </div>
-          </label>
-          <div class="form-row">
-            <label class="remember-box">
-              <input v-model="loginForm.remember" type="checkbox" />
-              <span>记住我</span>
-            </label>
-            <button type="button" class="ghost-link">忘记密码?</button>
-          </div>
-          <button type="submit" class="primary-action">进入灵境</button>
-        </form>
-
-        <form v-else class="auth-form" @submit.prevent="handleRegister">
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-            </span>
-            <input v-model="registerForm.nickname" type="text" placeholder="昵称" required />
-          </label>
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-            </span>
-            <input v-model="registerForm.username" type="text" placeholder="用户名 / 邮箱" required />
-          </label>
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-            </span>
-            <input v-model="registerForm.password" type="password" placeholder="密码" required />
-          </label>
-          <label class="field">
-            <span class="field-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-            </span>
-            <input
-              v-model="registerForm.confirmPassword"
-              type="password"
-              placeholder="确认密码"
-              required
-            />
-          </label>
-          <button type="submit" class="primary-action">创建账号</button>
-        </form>
-
-        <p v-if="authError" class="auth-status error">{{ authError }}</p>
-        <p v-else-if="authMessage" class="auth-status success">{{ authMessage }}</p>
-      </section>
-
-      <div class="footer-section">
-        <button class="footer-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.7 1.7 0 00.34 1.82l.05.06a2 2 0 11-2.83 2.83l-.06-.05A1.7 1.7 0 0015 19.4a1.7 1.7 0 00-1 1.53V21a2 2 0 11-4 0v-.08a1.7 1.7 0 00-1-1.52 1.7 1.7 0 00-1.9.36l-.06.05a2 2 0 11-2.83-2.83l.05-.06A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.52-1H3a2 2 0 110-4h.08A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.34-1.82l-.05-.06a2 2 0 112.83-2.83l.06.05A1.7 1.7 0 009 4.6a1.7 1.7 0 001-1.52V3a2 2 0 114 0v.08a1.7 1.7 0 001 1.52 1.7 1.7 0 001.9-.36l.06-.05a2 2 0 112.83 2.83l-.05.06A1.7 1.7 0 0019.4 9c.14.47.66.8 1.15.8H21a2 2 0 110 4h-.45c-.49 0-1.01.33-1.15.8Z"/>
-          </svg>
-          <span>设置</span>
-        </button>
-        <button class="footer-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 6h-3a5 5 0 00-5 5v2a3 3 0 00-3 3v7a2 2 0 002 2h10a2 2 0 002-2v-7a3 3 0 00-3-3V11a5 5 0 00-5-5z"/>
-            <line x1="16" y1="11" x2="16" y2="17"/>
-            <line x1="8" y1="11" x2="8" y2="17"/>
-          </svg>
-          <span>公告</span>
-        </button>
-        <button class="footer-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-          <span>客服</span>
-        </button>
-      </div>
+    <div class="magic-particles">
+      <div v-for="i in 20" :key="i" class="particle" :style="{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 5}s` }"></div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.login-stage {
+.auth-page {
+  width: 100%;
+  height: 100vh;
   position: relative;
-  min-height: 100vh;
   overflow: hidden;
-  background: #05070d;
-  color: #f2ead9;
+  background: linear-gradient(135deg, #05080e 0%, #080a10 50%, #0a0d14 100%);
 }
 
-.login-backdrop {
+.auth-bg {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('/src/assets/auth-bg.png');
+  background-size: cover;
+  background-position: center;
   z-index: 0;
 }
 
-.backdrop-image {
+.bg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center;
-  filter: brightness(0.85) saturate(0.95);
+  background: linear-gradient(135deg, rgba(5, 8, 14, 0.9) 0%, rgba(8, 10, 16, 0.85) 50%, rgba(10, 13, 20, 0.9) 100%);
+  backdrop-filter: blur(2px);
 }
 
-.backdrop-vignette {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(3, 5, 10, 0.96) 0%, rgba(3, 5, 10, 0.92) 25%, rgba(3, 5, 10, 0.7) 45%, rgba(3, 5, 10, 0.4) 70%, rgba(3, 5, 10, 0.2) 100%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, transparent 20%, transparent 80%, rgba(0, 0, 0, 0.4) 100%);
-}
-
-.magic-overlay {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 70% 30%, rgba(89, 206, 255, 0.08), transparent 30%),
-    radial-gradient(circle at 65% 45%, rgba(255, 183, 72, 0.05), transparent 25%);
-}
-
-.orb-container {
-  position: absolute;
-  right: 18%;
-  top: 28%;
-  width: 200px;
-  height: 200px;
-  pointer-events: none;
-}
-
-.orb-glow {
-  position: absolute;
-  inset: -40px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(89, 206, 255, 0.3), rgba(89, 206, 255, 0.1) 40%, transparent 70%);
-  filter: blur(30px);
-  animation: orbPulse 4s ease-in-out infinite;
-}
-
-.orb-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(89, 206, 255, 0.3);
-}
-
-.orb-ring-1 {
-  animation: ringRotate 20s linear infinite;
-}
-
-.orb-ring-2 {
-  inset: 15%;
-  border-color: rgba(255, 183, 72, 0.25);
-  animation: ringRotate 15s linear infinite reverse;
-}
-
-.orb-ring-3 {
-  inset: 30%;
-  border-color: rgba(89, 206, 255, 0.4);
-  animation: ringRotate 10s linear infinite;
-}
-
-.orb-core {
-  position: absolute;
-  inset: 40%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(89, 206, 255, 0.4) 50%, transparent);
-  filter: blur(8px);
-  animation: coreGlow 3s ease-in-out infinite;
-}
-
-@keyframes orbPulse {
-  0%, 100% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.1); opacity: 1; }
-}
-
-@keyframes ringRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes coreGlow {
-  0%, 100% { opacity: 0.6; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.1); }
-}
-
-.login-panel {
+.auth-content {
   position: relative;
-  z-index: 1;
-  width: 400px;
-  min-height: 100vh;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  padding: 32px 28px;
-  background: linear-gradient(180deg, rgba(4, 5, 10, 0.92), rgba(4, 5, 10, 0.85));
-  backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .brand-section {
-  margin-bottom: 32px;
-}
-
-.brand-icon {
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 12px rgba(240, 190, 90, 0.2));
-}
-
-.brand-kicker {
-  margin-top: 8px;
-  color: #5fcfff;
-  font-size: 11px;
-  letter-spacing: 0.45em;
-  text-transform: uppercase;
-}
-
-.brand-title {
-  margin-top: 4px;
-  font-size: 38px;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  color: #f3f0e8;
-}
-
-.brand-copy {
-  margin-top: 12px;
-  max-width: 22ch;
-  color: rgba(237, 228, 211, 0.65);
-  line-height: 1.7;
-  font-size: 13px;
-}
-
-.menu-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 28px;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  color: #d7d0c1;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  border-radius: 8px;
-}
-
-.menu-item:hover {
-  border-color: rgba(243, 180, 92, 0.3);
-  background: rgba(243, 180, 92, 0.05);
-}
-
-.menu-item.active {
-  border-color: rgba(243, 180, 92, 0.5);
-  background: linear-gradient(90deg, rgba(243, 180, 92, 0.12), rgba(255, 255, 255, 0.02));
-}
-
-.menu-item-icon {
-  width: 28px;
-  height: 28px;
+  width: 55%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(243, 180, 92, 0.6);
+  padding: 60px;
+  position: relative;
 }
 
-.menu-item-icon svg {
-  width: 18px;
-  height: 18px;
+.brand-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent 0%, rgba(245, 185, 91, 0.2) 20%, rgba(245, 185, 91, 0.3) 50%, rgba(245, 185, 91, 0.2) 80%, transparent 100%);
 }
 
-.menu-item.active .menu-item-icon {
-  color: #f3b45c;
+.brand-inner {
+  max-width: 520px;
+  animation: fadeInLeft 0.8s ease-out;
 }
 
-.menu-item-label {
-  flex: 1;
+@keyframes fadeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.brand-logo {
+  margin-bottom: 32px;
+}
+
+.d20-icon {
+  width: 80px;
+  height: 80px;
+  background: radial-gradient(130% 130% at 30% 30%, #f5b95b 0%, #d49a3f 40%, #8b6914 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 40px rgba(245, 185, 91, 0.4), inset 0 -10px 20px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.d20-icon::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.d20-number {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1a1a2e;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.brand-title {
+  font-size: 56px;
+  font-weight: 800;
+  color: #f5b95b;
+  letter-spacing: 8px;
+  margin-bottom: 8px;
+  text-shadow: 0 0 30px rgba(245, 185, 91, 0.5);
+}
+
+.brand-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #f5e6c8;
+  letter-spacing: 12px;
+  margin-bottom: 28px;
+  opacity: 0.9;
+}
+
+.brand-slogan {
   font-size: 16px;
-  letter-spacing: 0.06em;
+  line-height: 1.8;
+  color: #c9b896;
+  margin-bottom: 48px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
 }
 
-.menu-item-desc {
-  font-size: 11px;
-  color: rgba(215, 208, 193, 0.5);
+.features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(245, 185, 91, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(245, 185, 91, 0.1);
+  transition: all 0.3s ease;
+}
+
+.feature-item:hover {
+  background: rgba(245, 185, 91, 0.08);
+  border-color: rgba(245, 185, 91, 0.2);
+  transform: translateY(-2px);
+}
+
+.feature-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6fe8ff;
+  flex-shrink: 0;
+}
+
+.feature-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feature-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f5b95b;
+}
+
+.feature-desc {
+  font-size: 12px;
+  color: #9ca3af;
 }
 
 .form-section {
+  width: 45%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(10, 12, 18, 0.82);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 40px;
+  position: relative;
+  animation: fadeInRight 0.8s ease-out;
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.card-glow {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(135deg, rgba(245, 185, 91, 0.15) 0%, rgba(111, 232, 255, 0.1) 50%, rgba(245, 185, 91, 0.15) 100%);
+  border-radius: 18px;
+  z-index: -1;
+  filter: blur(20px);
+}
+
+.card-border {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 1px solid rgba(245, 185, 91, 0.2);
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+.card-header {
+  margin-bottom: 32px;
+}
+
+.tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tab-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+  color: #f5e6c8;
+}
+
+.tab-btn.active {
+  background: rgba(245, 185, 91, 0.15);
+  color: #f5b95b;
+}
+
+.tab-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
-.field {
+.form-group {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.field-icon {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(243, 180, 92, 0.5);
-  flex-shrink: 0;
-}
-
-.field-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.field input {
-  flex: 1;
-  padding: 14px 0;
-  border: none;
-  background: transparent;
-  color: #f5efe2;
-  outline: none;
-  font-size: 14px;
-}
-
-.field input::placeholder {
-  color: rgba(215, 208, 193, 0.35);
-}
-
-.field:focus-within {
-  border-color: rgba(98, 218, 255, 0.4);
-  box-shadow: 0 0 0 3px rgba(98, 218, 255, 0.08);
-}
-
-.password-row {
-  flex: 1;
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
 }
 
-.password-row input {
-  flex: 1;
-  padding: 14px 0;
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #c9b896;
+  font-weight: 500;
 }
 
-.eye-btn {
-  padding: 8px 12px;
-  border: none;
-  background: rgba(255, 255, 255, 0.05);
-  color: #68ddff;
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 6px;
+.form-label svg {
+  width: 14px;
+  height: 14px;
 }
 
-.form-row {
+.form-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #f5e6c8;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.form-input::placeholder {
+  color: #4b5563;
+}
+
+.form-input:focus {
+  border-color: #6fe8ff;
+  box-shadow: 0 0 15px rgba(111, 232, 255, 0.3), inset 0 0 10px rgba(111, 232, 255, 0.1);
+}
+
+.form-options {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
 }
 
-.remember-box {
-  display: inline-flex;
+.checkbox-label {
+  display: flex;
   align-items: center;
   gap: 8px;
-  color: rgba(237, 228, 211, 0.65);
-  font-size: 12px;
+  font-size: 13px;
+  color: #9ca3af;
+  cursor: pointer;
 }
 
-.remember-box input {
-  accent-color: #f3b45c;
+.form-checkbox {
+  display: none;
 }
 
-.ghost-link {
-  border: none;
+.checkbox-custom {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.form-checkbox:checked + .checkbox-custom {
+  background: #f5b95b;
+  border-color: #f5b95b;
+}
+
+.form-checkbox:checked + .checkbox-custom::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid #1a1a2e;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.forgot-link {
   background: none;
-  color: #68ddff;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.primary-action {
-  margin-top: 12px;
-  padding: 14px 18px;
   border: none;
-  border-radius: 10px;
-  background: linear-gradient(90deg, #f3b45c, #f7d28f 50%, #ef9b37 100%);
-  color: #1c140d;
-  font-size: 15px;
-  font-weight: 700;
+  color: #6fe8ff;
+  font-size: 13px;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(239, 155, 55, 0.25);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: color 0.3s ease;
 }
 
-.primary-action:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(239, 155, 55, 0.3);
+.forgot-link:hover {
+  color: #8ff0ff;
 }
 
-.auth-status {
-  margin-top: 10px;
-  font-size: 12px;
-  text-align: center;
-}
-
-.auth-status.error {
-  color: #ff8e8e;
-}
-
-.auth-status.success {
-  color: #86e0b5;
-}
-
-.footer-section {
+.submit-btn {
+  margin-top: 8px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f5b95b 0%, #d49a3f 50%, #f5b95b 100%);
+  background-size: 200% 200%;
+  border: none;
+  border-radius: 8px;
+  color: #1a1a2e;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
   display: flex;
-  justify-content: space-around;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.footer-btn {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 16px;
-  border: none;
-  background: transparent;
-  color: rgba(215, 208, 193, 0.5);
-  cursor: pointer;
-  transition: color 0.2s ease;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
 }
 
-.footer-btn:hover {
-  color: #f3b45c;
+.submit-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px rgba(245, 185, 91, 0.3);
+  animation: shimmer 2s ease-in-out infinite;
 }
 
-.footer-btn svg {
+@keyframes shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.submit-btn svg {
   width: 18px;
   height: 18px;
 }
 
-.footer-btn span {
-  font-size: 11px;
+.card-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
 }
 
-@media (max-width: 768px) {
-  .login-panel {
-    width: 100%;
-    border-right: none;
-    padding: 24px 20px;
-  }
+.switch-link {
+  background: none;
+  border: none;
+  color: #f5b95b;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
 
-  .orb-container {
+.switch-link:hover {
+  color: #ffe0a3;
+}
+
+.magic-particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #f5b95b;
+  border-radius: 50%;
+  opacity: 0;
+  animation: floatUp 5s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(245, 185, 91, 0.5);
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(100vh) scale(0);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(90vh) scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: translateY(10vh) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0);
+  }
+}
+
+@media (max-width: 992px) {
+  .brand-section {
     display: none;
   }
-
-  .brand-title {
-    font-size: 32px;
+  
+  .form-section {
+    width: 100%;
+    padding: 20px;
   }
+  
+  .auth-card {
+    padding: 30px 24px;
+  }
+  
+  .brand-title {
+    font-size: 40px;
+  }
+  
+  .features {
+    grid-template-columns: 1fr;
+  }
+}
 
-  .menu-item {
-    padding: 10px 14px;
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 24px 20px;
+  }
+  
+  .tab-btn {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+  
+  .form-input {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  
+  .submit-btn {
+    padding: 14px;
+    font-size: 14px;
   }
 }
 </style>
