@@ -1,0 +1,39 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
+}
+
+#app {
+  width: 100%;
+  min-height: 100%;
+}
+
+:root {
+  --bg-dark: #1a1510;
+  --bg-deep: #2d241a;
+  --bg-wood: #3d3024;
+  --paper: #f5efe6;
+  --paper-light: #e8e0d5;
+  --paper-dark: #d4c8b8;
+  --ink: #2d241a;
+  --ink-light: #3d3024;
+  --accent: #8b7355;
+  --accent-light: #a67c52;
+  --accent-dark: #6b5a45;
+  --burgundy: #5c3d3d;
+  --burgundy-light: #7a4a4a;
+  --gold: #c9a962;
+  --gold-light: #d4b87a;
+  --text-primary: #2d241a;
+  --text-secondary: #4a3d32;
+  --text-muted: #6b5a4a;
+}
