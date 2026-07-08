@@ -74,7 +74,7 @@ const submitJoin = () => {
             v-model="inviteCode"
             class="form-input"
             type="text"
-            placeholder="请输入房间邀请码或会话 ID..."
+            placeholder="请输入 6 位房间码..."
             @keyup.enter="submitJoin"
           />
         </div>

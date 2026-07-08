@@ -3,12 +3,14 @@ from __future__ import annotations
 from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
 from backend.app.ai.schemas.agent_result import AgentResult
 from backend.app.ai.schemas.character import CharacterCard, WorldContext
+from backend.app.ai.schemas.guidance import GuidanceInput, GuidanceOutput
 from backend.app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
 from backend.app.ai.schemas.narrative import NarrativeInput, NarrativeWithReviewResult
 from backend.app.ai.schemas.opening import OpeningInput, OpeningOutput
 from backend.app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
 from backend.app.ai.schemas.summary import SummaryInput, SummaryOutput
 from backend.app.ai.services.action_parser_agent import ActionParserAgent
+from backend.app.ai.services.guidance_agent import GuidanceAgent
 from backend.app.ai.services.module_extractor_agent import ModuleExtractorAgent
 from backend.app.ai.services.opening_agent import OpeningAgent
 from backend.app.ai.services.revision_loop import RevisionLoop
@@ -29,6 +31,7 @@ class AIModule:
         self.action_parser_agent = ActionParserAgent()
         self.revision_loop = RevisionLoop()
         self.summary_agent = SummaryAgent()
+        self.guidance_agent = GuidanceAgent()
         self.rulebook_extractor_agent = RulebookExtractorAgent()
         self.module_extractor_agent = ModuleExtractorAgent()
 
@@ -71,6 +74,14 @@ class AIModule:
 
     async def generate_summary(self, data: SummaryInput) -> AgentResult[SummaryOutput]:
         output, llm = await self.summary_agent.generate(data)
+        return AgentResult(
+            output=output,
+            tokens_used=llm.tokens_used if llm else 0,
+            latency_ms=llm.latency_ms if llm else 0,
+        )
+
+    async def generate_guidance(self, data: GuidanceInput) -> AgentResult[GuidanceOutput]:
+        output, llm = await self.guidance_agent.generate(data)
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,

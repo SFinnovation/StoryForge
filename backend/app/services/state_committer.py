@@ -352,6 +352,7 @@ def commit_action(
     used_fallback: bool,
     tokens_used: int,
     latency_ms: int,
+    actor_name: str = "Player",
 ) -> CommitActionResult:
     state_updates = narrative.state_updates
     scene_for_check = state_updates.scene or session.current_scene
@@ -359,7 +360,7 @@ def commit_action(
     player_msg = Message(
         session_id=session.id,
         sender_type="player",
-        sender_name="Player",
+        sender_name=actor_name,
         content=action_text,
         message_type="action",
         created_at=_now(),

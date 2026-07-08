@@ -34,6 +34,12 @@ INDEXES = [
     Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
     Index("idx_npc_profiles_session_scene", models.NpcProfile.session_id, models.NpcProfile.related_scene),
     Index("idx_ai_reviews_session", models.AiReview.session_id, models.AiReview.created_at),
+    # ---- 多人房间扩展表 (multiplayer-realtime-design §3) ----
+    Index("idx_rooms_owner_status", models.Room.owner_id, models.Room.status),
+    Index("idx_room_members_room", models.RoomMember.room_id),
+    Index("idx_room_members_user", models.RoomMember.user_id),
+    Index("idx_room_messages_room_seq", models.RoomMessage.room_id, models.RoomMessage.seq),
+    Index("idx_room_actions_room", models.RoomAction.room_id, models.RoomAction.status),
 ]
 
 DEMO_USER_ID = 1
@@ -59,6 +65,17 @@ def _ensure_legacy_columns() -> None:
             statements.append("ALTER TABLE worlds ADD COLUMN rulebook_pack_id INTEGER")
         if "adventure_module_id" not in world_columns:
             statements.append("ALTER TABLE worlds ADD COLUMN adventure_module_id INTEGER")
+
+    if "game_sessions" in table_names:
+        session_columns = {column["name"] for column in inspector.get_columns("game_sessions")}
+        if "room_id" not in session_columns:
+            statements.append("ALTER TABLE game_sessions ADD COLUMN room_id INTEGER")
+        if "mode" not in session_columns:
+            statements.append(
+                "ALTER TABLE game_sessions ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'single'"
+            )
+        if "host_user_id" not in session_columns:
+            statements.append("ALTER TABLE game_sessions ADD COLUMN host_user_id INTEGER")
 
     if not statements:
         return

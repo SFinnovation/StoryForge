@@ -8,7 +8,7 @@
 - `users` 表补充 `email` 与 `status`，账号状态支持 `active` / `banned`。
 - 前端仍无管理员页面；当前仅后端与数据库已准备好，等待前端管理后台对接。
 
-> 本文档描述当前仓库的实际架构与模块边界。更完整的目标规格见 [implementation-spec.md](implementation-spec.md)，逐模块检查见 [module-audit.md](module-audit.md)。
+> 本文档描述当前仓库的实际架构与模块边界。更完整的目标规格见 [implementation-spec.md](implementation-spec.md)，逐模块检查见 [module-audit.md](module-audit.md)，多人实时跑团扩展设计见 [multiplayer-realtime-design.md](multiplayer-realtime-design.md)。
 
 ## 概述
 
@@ -125,6 +125,16 @@ DDL 位于 `backend/app/db/schema.sql`，ORM 位于 `backend/app/models/models.p
 
 集成方案见 [akp-integration-plan.md](akp-integration-plan.md)（三种模式、P0–P2 路线图、可开关回退）。
 
+### 7. 多人房间与实时跑团 — 📋 方案待实施
+
+当前所有跑团为单人 `GameSession`，无 WebSocket / room 层。多人实时扩展在不破坏单人 REST 闭环的前提下增量引入：
+
+- **数据层**：新增 `rooms` / `room_members` / `room_messages` / `room_actions`；`game_sessions` 补 `room_id` / `mode` / `host_user_id`（room 与 session 保持 1:1，跑团数据继续挂 `session_id`）。
+- **通信层**：REST 负责建房/加入/开始/历史，WebSocket（`/api/v1/ws/rooms/{room_id}`）负责聊天、成员在线、行动提交与 AI 广播；统一"先落库后广播"。
+- **AI 层**：区分普通聊天与 `action.submit`，仅行动触发完整流水线（复用 `run_action_pipeline`）；新增 `GuidanceAgent` 提供不剧透的规则指导。
+
+完整设计（数据模型 / REST + WS 协议 / AI DM 编排 / 前后端目录 / 兼容策略 / P0–P2 路线）见 [multiplayer-realtime-design.md](multiplayer-realtime-design.md)。
+
 ## API 原则
 
 - 路由统一挂载在 `/api/v1`
@@ -145,6 +155,7 @@ DDL 位于 `backend/app/db/schema.sql`，ORM 位于 `backend/app/models/models.p
 
 | 日期 | 说明 |
 |------|------|
+| 2026-07-09 | 新增多人房间与实时跑团规划章节，链接 multiplayer-realtime-design |
 | 2026-07-08 | 新增内容知识引擎章节，链接 AKP 集成方案 |
 | 2026-07-08 | 清理冲突标记，按当前仓库结构重写架构说明 |
 | 2026-07-07 | 初始文档骨架 |

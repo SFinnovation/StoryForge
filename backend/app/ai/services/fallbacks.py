@@ -220,3 +220,37 @@ def mock_summary(data: SummaryInput) -> SummaryOutput:
         ending_type="open",
         next_suggestion="调查东侧走廊和钟摆机关",
     )
+
+
+def mock_guidance(data) -> "GuidanceOutput":
+    from backend.app.ai.schemas.guidance import GuidanceOutput
+
+    scene = data.current_scene or "当前区域"
+    q = (data.question or "").lower()
+    if "检定" in q or "骰" in q or "dc" in q:
+        return GuidanceOutput(
+            answer=(
+                "检定是否成功取决于 d20 + 属性修正 + 熟练加值是否达到 DM 设定的 DC。"
+                f"在「{scene}」中，观察类行动通常关联感知或调查；潜行关联敏捷（隐匿）。"
+                "你可以先描述具体想做什么，再提交行动让系统解析检定类型。"
+            ),
+            suggested_options=[
+                "描述你想调查的具体目标并提交行动",
+                "先与可见 NPC 交谈获取方向",
+                "查看你已掌握的线索再决定下一步",
+            ],
+            rule_hint="属性修正 = floor((属性值 - 10) / 2)。",
+        )
+    return GuidanceOutput(
+        answer=(
+            f"根据你目前掌握的信息，在「{scene}」你仍有多条可行路径。"
+            "优先巩固已知线索、与在场 NPC 互动，或针对场景中的可疑细节发起调查行动。"
+            "提交行动后 AI DM 会解析是否需要检定并给出叙事结果。"
+        ),
+        suggested_options=[
+            "仔细观察环境中的异常细节",
+            "向在场 NPC 打听消息",
+            "前往相邻区域继续探索",
+        ],
+        rule_hint="",
+    )

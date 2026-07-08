@@ -14,10 +14,17 @@ from backend.app.repositories.fact_repo import FactRepo
 from backend.app.repositories.message_repo import MessageRepo
 from backend.app.repositories.npc_repo import NpcRepo
 from backend.app.repositories.report_repo import ReportRepo
+from backend.app.repositories.room_repository import (
+    RoomActionRepo,
+    RoomMemberRepo,
+    RoomMessageRepo,
+    RoomRepo,
+)
 from backend.app.repositories.session_repo import SessionRepo
 from backend.app.repositories.task_repo import TaskRepo
 
 __all__ = [
     "ActionCheckRepo", "AiReviewRepo", "ClueRepo", "FactRepo",
     "MessageRepo", "NpcRepo", "ReportRepo", "SessionRepo", "TaskRepo",
+    "RoomRepo", "RoomMemberRepo", "RoomMessageRepo", "RoomActionRepo",
 ]

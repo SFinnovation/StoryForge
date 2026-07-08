@@ -180,6 +180,48 @@ export const charactersApi = {
   create: (payload) => apiRequest('/characters', { method: 'POST', body: payload })
 }
 
+export const roomsApi = {
+  list: ({ scope = 'mine' } = {}) => apiRequest(`/rooms?scope=${encodeURIComponent(scope)}`),
+  get: (roomId) => apiRequest(`/rooms/${roomId}`),
+  create: (payload) => apiRequest('/rooms', { method: 'POST', body: payload }),
+  join: (payload) => apiRequest('/rooms/join', { method: 'POST', body: payload }),
+  leave: (roomId) => apiRequest(`/rooms/${roomId}/leave`, { method: 'POST' }),
+  setReady: (roomId, isReady) =>
+    apiRequest(`/rooms/${roomId}/ready`, { method: 'POST', body: { is_ready: isReady } }),
+  setCharacter: (roomId, characterId) =>
+    apiRequest(`/rooms/${roomId}/character`, { method: 'POST', body: { character_id: characterId } }),
+  start: (roomId, characterId = null) =>
+    apiRequest(`/rooms/${roomId}/start`, { method: 'POST', body: { character_id: characterId } }),
+  end: (roomId) => apiRequest(`/rooms/${roomId}/end`, { method: 'POST' }),
+  messages: (roomId, { beforeSeq = null, afterSeq = null, limit = 50 } = {}) => {
+    const params = new URLSearchParams()
+    if (beforeSeq != null) params.set('before_seq', String(beforeSeq))
+    if (afterSeq != null) params.set('after_seq', String(afterSeq))
+    params.set('limit', String(limit))
+    return apiRequest(`/rooms/${roomId}/messages?${params.toString()}`)
+  },
+  chat: (roomId, content, clientMsgId = null) =>
+    apiRequest(`/rooms/${roomId}/chat`, {
+      method: 'POST',
+      body: { content, client_msg_id: clientMsgId }
+    }),
+  ooc: (roomId, content, clientMsgId = null) =>
+    apiRequest(`/rooms/${roomId}/ooc`, {
+      method: 'POST',
+      body: { content, client_msg_id: clientMsgId }
+    }),
+  action: (roomId, actionText, clientMsgId = null) =>
+    apiRequest(`/rooms/${roomId}/action`, {
+      method: 'POST',
+      body: { action_text: actionText, client_msg_id: clientMsgId }
+    }),
+  ask: (roomId, question, { clientMsgId = null, visibility = 'self' } = {}) =>
+    apiRequest(`/rooms/${roomId}/ask`, {
+      method: 'POST',
+      body: { question, client_msg_id: clientMsgId, visibility }
+    })
+}
+
 export const sessionsApi = {
   list: () => apiRequest('/sessions'),
   get: (sessionId) => apiRequest(`/sessions/${sessionId}`),

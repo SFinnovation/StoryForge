@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { charactersApi, sessionsApi, worldsApi } from './api/client'
+import { charactersApi, roomsApi, sessionsApi, worldsApi } from './api/client'
 import JoinRoomModal from './JoinRoomModal.vue'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
@@ -21,7 +21,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['navigate', 'session-created', 'logout'])
+const emit = defineEmits(['navigate', 'enter-room', 'session-created', 'logout'])
 
 const showCreateModal = ref(false)
 const showJoinModal = ref(false)
@@ -30,6 +30,8 @@ const activeNav = ref(props.currentPage)
 const worlds = ref([])
 const characters = ref([])
 const sessions = ref([])
+const rooms = ref([])
+const publicRooms = ref([])
 const apiStatus = ref('')
 const joinRoomError = ref('')
 const isSubmitting = ref(false)
@@ -110,27 +112,52 @@ const scriptTemplates = computed(() => {
   return fallbackScriptTemplates
 })
 
-const quickRooms = computed(() => {
-  if (sessions.value.length === 0) return fallbackQuickRooms
+const statusLabel = (status) => {
+  const map = { waiting: '招募中', playing: '进行中', paused: '暂停', finished: '已结束', archived: '已归档' }
+  return map[status] || status
+}
 
-  return sessions.value.slice(0, 3).map((session) => ({
-    name: session.title || `会话 #${session.id}`,
-    players: session.status === 'playing' ? '进行中' : session.status,
+const worldName = (worldId) => worlds.value.find((w) => w.id === worldId)?.name || '未知世界'
+
+const quickRooms = computed(() => {
+  if (rooms.value.length === 0) return fallbackQuickRooms
+
+  return rooms.value.slice(0, 3).map((room) => ({
+    name: room.title || `房间 #${room.id}`,
+    players: statusLabel(room.status),
     owner: props.currentUser?.nickname || props.currentUser?.username || '当前用户',
-    sessionId: session.id
+    roomId: room.id
   }))
 })
 
-const joinableRooms = computed(() => quickRooms.value.map((room, index) => ({
-  id: room.sessionId || `preset-${index}`,
-  sessionId: room.sessionId || null,
-  name: room.name,
-  worldview: index === 1 ? 'COC 7th' : index === 2 ? 'Custom' : 'D&D 5e',
-  players: room.players,
-  status: room.sessionId ? '进行中' : '招募中'
-})))
+const joinableRooms = computed(() => {
+  const merged = [...rooms.value]
+  for (const r of publicRooms.value) {
+    if (!merged.some((m) => m.id === r.id)) merged.push(r)
+  }
+  return merged.map((room) => ({
+    id: room.id,
+    roomId: room.id,
+    roomCode: room.room_code,
+    name: room.title || `房间 #${room.id}`,
+    worldview: worldName(room.world_id),
+    players: `${room.max_players} 上限`,
+    status: statusLabel(room.status)
+  }))
+})
 
 const lastAdventure = computed(() => {
+  const playingRoom = rooms.value.find((r) => r.status === 'playing')
+  if (playingRoom) {
+    return {
+      title: playingRoom.title || `房间 #${playingRoom.id}`,
+      chapter: `${statusLabel(playingRoom.status)} · 房间码 ${playingRoom.room_code}`,
+      progress: 68,
+      teamSync: 61,
+      roomId: playingRoom.id
+    }
+  }
+
   const session = sessions.value[0]
   if (!session) return fallbackLastAdventure
 
@@ -159,14 +186,18 @@ const difficulties = [
 
 const refreshLobbyData = async () => {
   try {
-    const [worldList, characterList, sessionList] = await Promise.all([
+    const [worldList, characterList, sessionList, roomList, publicRoomList] = await Promise.all([
       worldsApi.list(),
       charactersApi.list(),
-      sessionsApi.list()
+      sessionsApi.list(),
+      roomsApi.list().catch(() => []),
+      roomsApi.list({ scope: 'public' }).catch(() => [])
     ])
     worlds.value = worldList
     characters.value = characterList
     sessions.value = sessionList
+    rooms.value = roomList || []
+    publicRooms.value = publicRoomList || []
   } catch (error) {
     apiStatus.value = error?.message || '大厅数据同步失败，请稍后重试。'
   }
@@ -194,16 +225,22 @@ const handleCreateRoom = async () => {
 
   isSubmitting.value = true
   try {
-    const data = await sessionsApi.start({
+    const detail = await roomsApi.create({
+      title: createRoomForm.roomName.trim(),
       world_id: world.id,
-      character_id: characters.value[0].id
+      visibility: createRoomForm.roomType === 'public' ? 'public' : 'private',
+      max_players: Number(createRoomForm.maxPlayers) || 4
     })
+    const charId = characters.value[0]?.id
+    if (charId) {
+      await roomsApi.setCharacter(detail.room.id, charId)
+    }
     await refreshLobbyData()
     showCreateModal.value = false
-    apiStatus.value = '冒险会话已创建。'
-    emit('session-created', data)
+    apiStatus.value = `房间已创建，房间码：${detail.room.room_code}`
+    emit('enter-room', { roomId: detail.room.id })
   } catch (error) {
-    apiStatus.value = error?.message || '创建会话失败。'
+    apiStatus.value = error?.message || '创建房间失败。'
   } finally {
     isSubmitting.value = false
   }
@@ -222,37 +259,44 @@ const closeJoinModal = () => {
 const handleJoinRoom = async ({ code = '', room = null } = {}) => {
   joinRoomError.value = ''
 
-  if (room?.sessionId) {
-    closeJoinModal()
-    emit('session-created', { session: room })
-    return
-  }
-
-  const trimmedCode = code.trim()
-  if (trimmedCode) {
-    const sessionId = Number(trimmedCode)
-    if (!Number.isInteger(sessionId) || sessionId <= 0) {
-      joinRoomError.value = '房间号需要是有效的会话 ID。'
+  const charId = characters.value[0]?.id ?? null
+  isSubmitting.value = true
+  try {
+    if (room?.roomId) {
+      const detail = await roomsApi.join({
+        room_code: room.roomCode || String(room.roomId),
+        character_id: charId
+      })
+      closeJoinModal()
+      emit('enter-room', { roomId: detail.room.id })
       return
     }
 
-    isSubmitting.value = true
-    try {
-      const session = await sessionsApi.get(sessionId)
+    const trimmedCode = code.trim().toUpperCase()
+    if (trimmedCode) {
+      const detail = await roomsApi.join({
+        room_code: trimmedCode,
+        character_id: charId
+      })
       closeJoinModal()
-      emit('session-created', { session })
-    } catch (error) {
-      joinRoomError.value = error?.message || '未找到可加入的房间。'
-    } finally {
-      isSubmitting.value = false
+      emit('enter-room', { roomId: detail.room.id })
+      return
     }
-    return
-  }
 
-  joinRoomError.value = '当前公开房间是展示样例，需输入真实房间号或选择已有会话。'
+    joinRoomError.value = '请输入房间码，或从列表中选择一个房间。'
+  } catch (error) {
+    joinRoomError.value = error?.message || '加入房间失败。'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 const handleContinue = () => {
+  const playingRoom = rooms.value.find((r) => r.status === 'playing')
+  if (playingRoom) {
+    emit('enter-room', { roomId: playingRoom.id })
+    return
+  }
   if (lastAdventure.value.sessionId) {
     emit('session-created', { session: lastAdventure.value })
     return
@@ -261,8 +305,8 @@ const handleContinue = () => {
 }
 
 const handleQuickJoin = (room) => {
-  if (room.sessionId) {
-    emit('session-created', { session: room })
+  if (room.roomId) {
+    emit('enter-room', { roomId: room.roomId })
     return
   }
   openJoinModal()

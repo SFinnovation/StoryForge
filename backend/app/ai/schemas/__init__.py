@@ -10,6 +10,7 @@ from backend.app.ai.schemas.narrative import (
     NewClue,
     StateUpdates,
 )
+from backend.app.ai.schemas.guidance import GuidanceInput, GuidanceOutput
 from backend.app.ai.schemas.module_extract import ModuleExtractionInput, ModuleExtractionOutput
 from backend.app.ai.schemas.opening import OpeningInput, OpeningOutput
 from backend.app.ai.schemas.rulebook_extract import RulebookExtractionInput, RulebookExtractionOutput
@@ -24,6 +25,8 @@ __all__ = [
     "CheckResult",
     "CriticOutput",
     "CriticScores",
+    "GuidanceInput",
+    "GuidanceOutput",
     "ModuleExtractionInput",
     "ModuleExtractionOutput",
     "NarrativeInput",

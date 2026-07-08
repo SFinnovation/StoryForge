@@ -7,11 +7,13 @@ from backend.app.api.v1 import (
     characters,
     content,
     export,
+    rooms,
     rules,
     sessions,
     stories,
     worldbuilding,
     worlds,
+    ws_rooms,
 )
 
 api_router = APIRouter()
@@ -27,3 +29,5 @@ api_router.include_router(stories.router)
 api_router.include_router(chapters.router)
 api_router.include_router(worldbuilding.router)
 api_router.include_router(export.router)
+api_router.include_router(rooms.router)
+api_router.include_router(ws_rooms.router)

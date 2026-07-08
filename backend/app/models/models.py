@@ -30,7 +30,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     characters: Mapped[list["Character"]] = relationship(back_populates="user")
-    sessions: Mapped[list["GameSession"]] = relationship(back_populates="user")
+    sessions: Mapped[list["GameSession"]] = relationship(
+        back_populates="user", foreign_keys="GameSession.user_id"
+    )
     admin_logs: Mapped[list["AdminOperationLog"]] = relationship(back_populates="admin")
 
     __table_args__ = (
@@ -183,8 +185,13 @@ class GameSession(Base):
     turns_since_key_clue: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # ---- 多人房间扩展 (docs/multiplayer-realtime-design §3.7) ----
+    # single: 沿用原单人闭环; multiplayer: 由 room host 建局, 成员通过 room_members 关联角色
+    room_id: Mapped[int | None] = mapped_column(ForeignKey("rooms.id"))
+    mode: Mapped[str] = mapped_column(String(16), default="single", nullable=False)
+    host_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
-    user: Mapped["User"] = relationship(back_populates="sessions")
+    user: Mapped["User"] = relationship(back_populates="sessions", foreign_keys=[user_id])
     world: Mapped["World"] = relationship()
     character: Mapped["Character"] = relationship()
     messages: Mapped[list["Message"]] = relationship(back_populates="session")
@@ -423,3 +430,120 @@ class AdminOperationLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     admin: Mapped["User"] = relationship(back_populates="admin_logs")
+
+
+# ============================================================
+# 多人房间与实时跑团扩展表 (docs/multiplayer-realtime-design §3)
+# ============================================================
+
+
+class Room(Base):
+    """多人协作容器。room 与 game_session 为 1:1（同时只推进一局）。"""
+
+    __tablename__ = "rooms"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    room_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False)  # 加入用
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    world_id: Mapped[int] = mapped_column(ForeignKey("worlds.id"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # 无 FK 以打破 rooms<->game_sessions 循环外键（SQLite create_all 友好）
+    current_session_id: Mapped[int | None] = mapped_column(Integer)
+    visibility: Mapped[str] = mapped_column(String(10), default="private", nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="waiting", nullable=False)
+    max_players: Mapped[int] = mapped_column(Integer, default=6, nullable=False)
+    invite_code: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    members: Mapped[list["RoomMember"]] = relationship(
+        back_populates="room", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("visibility IN ('public','private')", name="ck_rooms_visibility"),
+        CheckConstraint(
+            "status IN ('waiting','playing','paused','finished','archived')",
+            name="ck_rooms_status",
+        ),
+    )
+
+
+class RoomMember(Base):
+    __tablename__ = "room_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    character_id: Mapped[int | None] = mapped_column(ForeignKey("characters.id"))
+    role: Mapped[str] = mapped_column(String(10), default="player", nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(50))
+    online_status: Mapped[str] = mapped_column(String(10), default="offline", nullable=False)
+    is_ready: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    room: Mapped["Room"] = relationship(back_populates="members")
+
+    __table_args__ = (
+        UniqueConstraint("room_id", "user_id", name="uq_room_members_room_user"),
+        CheckConstraint("role IN ('host','player','spectator')", name="ck_room_members_role"),
+        CheckConstraint(
+            "online_status IN ('online','offline')", name="ck_room_members_online"
+        ),
+        CheckConstraint("is_ready IN (0, 1)", name="ck_room_members_ready"),
+    )
+
+
+class RoomMessage(Base):
+    """房间实时事件流（聊天/系统/AI 广播镜像）。与叙事日志 messages 分离。"""
+
+    __tablename__ = "room_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
+    session_id: Mapped[int | None] = mapped_column(Integer)
+    sender_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    sender_role: Mapped[str] = mapped_column(String(10), nullable=False)  # user|ai_dm|system
+    sender_name: Mapped[str | None] = mapped_column(String(50))
+    message_type: Mapped[str] = mapped_column(String(12), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    client_msg_id: Mapped[str | None] = mapped_column(String(64))
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("room_id", "client_msg_id", name="uq_room_messages_client"),
+        UniqueConstraint("room_id", "seq", name="uq_room_messages_seq"),
+        CheckConstraint(
+            "sender_role IN ('user','ai_dm','system')", name="ck_room_messages_role"
+        ),
+    )
+
+
+class RoomAction(Base):
+    """玩家提交的行动记录，用于幂等与（P2）队列。"""
+
+    __tablename__ = "room_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
+    session_id: Mapped[int | None] = mapped_column(Integer)
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    actor_character_id: Mapped[int | None] = mapped_column(ForeignKey("characters.id"))
+    action_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="pending", nullable=False)
+    result_message_id: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending','processing','done','rejected')",
+            name="ck_room_actions_status",
+        ),
+    )

@@ -9,6 +9,8 @@ from backend.app.ai.schemas import (
     AgentResult,
     CharacterCard,
     CheckResult,
+    GuidanceInput,
+    GuidanceOutput,
     ModuleExtractionInput,
     ModuleExtractionOutput,
     NarrativeInput,
@@ -47,6 +49,9 @@ class AIService:
 
     async def generate_summary(self, data: SummaryInput) -> AgentResult[SummaryOutput]:
         return await self._module.generate_summary(data)
+
+    async def generate_guidance(self, data: GuidanceInput) -> AgentResult[GuidanceOutput]:
+        return await self._module.generate_guidance(data)
 
     async def extract_rulebook(
         self, data: RulebookExtractionInput

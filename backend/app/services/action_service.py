@@ -20,7 +20,7 @@ from backend.app.schemas.session_schema import (
 )
 from backend.app.services.ai_service import get_ai_service
 from backend.app.services.clue_pressure import calculate as calc_clue_pressure
-from backend.app.services.context_builder import build_for_action
+from backend.app.services.context_builder import build_for_action, character_to_card
 from backend.app.services.rule_service import roll_check
 from backend.app.services.session_service import get_playing_session
 from backend.app.services.state_committer import commit_action
@@ -32,11 +32,32 @@ async def handle_action(
     user_id: int,
     action_text: str,
 ) -> ActionData:
+    """单人模式入口：校验会话归属后跑行动管线。"""
     session = get_playing_session(db, session_id, user_id)
-    character = db.get(Character, session.character_id)
+    return await run_action_pipeline(db, session, action_text)
+
+
+async def run_action_pipeline(
+    db: Session,
+    session: GameSession,
+    action_text: str,
+    *,
+    actor_name: str = "Player",
+    character_override: Character | None = None,
+) -> ActionData:
+    """行动管线核心：解析→检定→叙事→落库→组装 DTO。
+
+    不做会话归属校验（调用方负责：单人查 user_id，多人查 room 成员）。
+    actor_name 写入玩家消息的 sender_name，多人模式下用于区分发言者。
+    character_override 用于多人模式：以“实际行动的玩家角色”而非会话主角色进行检定
+    与叙事上下文。
+    """
+    character = character_override or db.get(Character, session.character_id)
     attrs = character
 
     ctx = build_for_action(db, session)
+    if character_override is not None:
+        ctx.character = character_to_card(character_override)
     ai = get_ai_service()
 
     parse_result = await ai.parse_action(
@@ -105,6 +126,7 @@ async def handle_action(
         used_fallback=story.used_fallback,
         tokens_used=tokens_used,
         latency_ms=latency_ms,
+        actor_name=actor_name,
     )
     meta = calc_clue_pressure(db, session)
     db.commit()
@@ -136,6 +158,8 @@ async def handle_action(
             id=commit.player_message.id,
             content=commit.player_message.content,
             message_type=commit.player_message.message_type,
+            sender_type=commit.player_message.sender_type,
+            sender_name=commit.player_message.sender_name,
             created_at=commit.player_message.created_at,
         ),
         check=check_dto,

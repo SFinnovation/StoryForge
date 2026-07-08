@@ -5,12 +5,14 @@ import HomePage from './HomePage.vue'
 import ScriptPage from './ScriptPage.vue'
 import ArchivePage from './ArchivePage.vue'
 import RolePage from './RolePage.vue'
+import GameRoomPage from './GameRoomPage.vue'
 import LoginRegister from './LoginRegister.vue'
 
 const PAGE_HOME = 'home'
 const PAGE_SCRIPT = 'script'
 const PAGE_ARCHIVE = 'archive'
 const PAGE_ROLE = 'role'
+const PAGE_ROOM = 'room'
 
 const currentPage = ref(PAGE_HOME)
 const selectedWorldview = ref(null)
@@ -18,12 +20,14 @@ const isAuthenticated = ref(Boolean(getStoredToken()))
 const isBootstrapping = ref(isAuthenticated.value)
 const currentUser = ref(getStoredUser())
 const latestSession = ref(null)
+const currentRoomId = ref(null)
 
 const pageComponentMap = {
   [PAGE_HOME]: HomePage,
   [PAGE_SCRIPT]: ScriptPage,
   [PAGE_ARCHIVE]: ArchivePage,
-  [PAGE_ROLE]: RolePage
+  [PAGE_ROLE]: RolePage,
+  [PAGE_ROOM]: GameRoomPage
 }
 
 const pageAliasMap = {
@@ -34,14 +38,23 @@ const pageAliasMap = {
   archive: PAGE_ARCHIVE,
   档案: PAGE_ARCHIVE,
   role: PAGE_ROLE,
-  角色: PAGE_ROLE
+  角色: PAGE_ROLE,
+  room: PAGE_ROOM,
+  房间: PAGE_ROOM
 }
 
 const activeComponent = computed(() => pageComponentMap[currentPage.value] || HomePage)
 
 const handleNavigate = (page, worldview = null) => {
   currentPage.value = pageAliasMap[page] || PAGE_HOME
+  if (currentPage.value === PAGE_HOME) currentRoomId.value = null
   selectedWorldview.value = worldview
+}
+
+const handleEnterRoom = (payload) => {
+  const roomId = typeof payload === 'object' && payload !== null ? payload.roomId : payload
+  currentRoomId.value = roomId != null ? Number(roomId) : null
+  currentPage.value = PAGE_ROOM
 }
 
 const handleEnterApp = (session = {}) => {
@@ -54,6 +67,7 @@ const handleLogout = () => {
   currentUser.value = null
   selectedWorldview.value = null
   latestSession.value = null
+  currentRoomId.value = null
   currentPage.value = PAGE_HOME
   isAuthenticated.value = false
 }
@@ -90,7 +104,9 @@ onMounted(async () => {
     :worldview="selectedWorldview"
     :current-user="currentUser"
     :latest-session="latestSession"
+    :initial-room-id="currentRoomId"
     @navigate="handleNavigate"
+    @enter-room="handleEnterRoom"
     @session-created="handleSessionCreated"
     @logout="handleLogout"
   />
