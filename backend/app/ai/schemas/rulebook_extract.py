@@ -5,6 +5,7 @@ class WorldFactItem(BaseModel):
     content: str
     importance: str = "normal"
     category: str = ""
+    source_ref: str = Field(default="", description="AKP references/ 出处路径或 node_id（可选）")
 
 
 class RulebookExtractionInput(BaseModel):
@@ -17,6 +18,10 @@ class RulebookExtractionInput(BaseModel):
         description="提取焦点：lite_dnd=跑团叙事所需轻量规则，full=完整规则摘要",
     )
     language: str = "zh"
+    evidence_bundles: list[str] = Field(
+        default_factory=list,
+        description="AKP 检索产出的带出处证据包（bundle.md）；非空时优先据此提炼",
+    )
 
 
 class RulebookExtractionOutput(BaseModel):

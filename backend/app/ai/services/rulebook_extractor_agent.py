@@ -18,6 +18,10 @@ class RulebookExtractorAgent:
         if not client.enabled:
             return mock_rulebook_extract(data), None
 
+        # AKP 模式：有证据包时，直接基于带出处的证据提炼（跳过关键词筛选/分块）。
+        if data.evidence_bundles:
+            return await self._extract_from_bundles(data)
+
         focused = select_rulebook_sections(data.raw_text)
         chunks = chunk_text(focused, chunk_size=6000)
 
@@ -43,6 +47,22 @@ class RulebookExtractorAgent:
             tokens += merge_llm.tokens_used
             latency += merge_llm.latency_ms
         return merged, LLMResponse(content="", tokens_used=tokens, latency_ms=latency)
+
+    async def _extract_from_bundles(
+        self, data: RulebookExtractionInput
+    ) -> tuple[RulebookExtractionOutput, LLMResponse | None]:
+        client = get_llm_client()
+        template = load_prompt("rulebook_extractor_bundle.txt")
+        evidence = "\n\n---\n\n".join(data.evidence_bundles)
+        user_content = render_prompt(
+            template,
+            source_name=data.source_name,
+            focus=data.focus,
+            evidence=evidence,
+        )
+        system = "你是 StoryForge RulebookExtractorAgent（证据包模式）。只输出 JSON。"
+        llm = await client.chat(system, user_content, temperature=0.2, max_tokens=4000)
+        return parse_model(llm.content, RulebookExtractionOutput), llm
 
     async def _extract_chunk(
         self, source_name: str, focus: str, chunk: str

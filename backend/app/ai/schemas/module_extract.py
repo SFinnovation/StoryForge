@@ -30,6 +30,7 @@ class ModuleFactItem(BaseModel):
     related_scene: str = ""
     importance: str = "normal"
     npc_id: str | None = None
+    source_ref: str = Field(default="", description="AKP references/ 出处路径或 node_id（可选）")
 
 
 class ModuleExtractionInput(BaseModel):
@@ -39,6 +40,10 @@ class ModuleExtractionInput(BaseModel):
     raw_text: str = Field(..., min_length=200)
     module_title: str = ""
     language: str = "zh"
+    evidence_bundles: list[str] = Field(
+        default_factory=list,
+        description="AKP 检索产出的带出处证据包（bundle.md）；非空时优先据此提炼",
+    )
 
 
 class ModuleExtractionOutput(BaseModel):

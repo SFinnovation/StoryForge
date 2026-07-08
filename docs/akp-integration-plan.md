@@ -1,9 +1,26 @@
 # StoryForge × Auditable Knowledge Packs 集成方案
 
-> **版本**：v1.0 · **创建**：2026-07-08
-> **状态**：📋 方案设计（待实施）
+> **版本**：v1.1 · **创建**：2026-07-08 · **更新**：2026-07-08
+> **状态**：✅ P0（模式 A）已实施 · 📋 P1/P2 待实施
 > **关联文档**：[ai-module-implementation.md](ai-module-implementation.md) · [ai-module-design.md](ai-module-design.md)
-> **外部项目**：Auditable Knowledge Packs（`auditable-knowledge-packs-main.zip`，Apache-2.0）
+> **外部项目**：Auditable Knowledge Packs（`auditable-knowledge-packs-main.zip`，Apache-2.0），已 vendoring 至 `third_party/akp/`
+
+---
+
+## 0. P0 实施说明（v1.1 落地记录）
+
+模式 A 已按本方案接入，落地时对照真实 AKP 代码做了如下**必要修正**（本文档其余章节保留原始设计，供 P1/P2 参考）：
+
+| 方案原设想 | 真实 AKP 实现 | 落地处理 |
+|------------|---------------|----------|
+| `kbtool research --run-dir ...` + `verify.json` | kbtool **无 `research` 子命令**；等价能力是 `bundle`（search+bundle 合并一步），产出 `runs/<id>.md`（含 `## References`）+ stdout JSON | `akp_client.research()` 内部调用 `kbtool.py bundle`；`verify_ok` 由「命中数>0 且 bundle 非空」推断 |
+| `--focus-doc` | `bundle` 无此参数（有 `--require-term` / `--exclude-term`） | 移除 `focus_doc`，保留 `require_terms` |
+| 数据模型改 `models/game.py` | 仓库已统一到 `models/models.py` | `knowledge_pack_dir` 加在 `models.py` 的 `RulebookPack` / `AdventureModule` |
+| 依赖 `pdftotext` 处理 docx | AKP docx 提取仅用标准库（zipfile+ElementTree） | 无新增依赖 |
+
+Windows 注意：子进程强制 `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8` 并以 UTF-8 解码，避免 GBK code page 破坏中文 JSON。
+
+已落地文件：`backend/app/ai/services/akp_client.py`、`backend/app/services/content_ingestion_service.py`（build→bundle→提炼 + 失败回退）、`backend/app/ai/prompts/{rulebook,module}_extractor_bundle.txt`、schema 增 `evidence_bundles` / `source_ref`、模型增 `knowledge_pack_dir`、冒烟测试 `backend/scripts/test_akp_integration.py`（M1 通过）。
 
 ---
 
@@ -380,16 +397,16 @@ class Fact(Base):
 
 ## 9. 分阶段实施路线图
 
-### P0 — 基础打通（模式 A，1–2 天）
+### P0 — 基础打通（模式 A，1–2 天）✅ 已完成
 
-- [ ] Vendoring：`pack-builder/` → `third_party/akp/`，保留 LICENSE
-- [ ] `data/knowledge_packs/` 加入 `.gitignore`
-- [ ] `Settings` 增加 `AKP_*` 配置项（默认 `AKP_ENABLED=false`）
-- [ ] 新增 `akp_client.py`（`is_enabled` / `build_pack` / `research` / `_parse_bundle`）
-- [ ] `RulebookExtractionInput` / `ModuleExtractionInput` 增加 `evidence_bundles`
-- [ ] `content_ingestion_service` 接入"build → research → 提炼"
-- [ ] `RulebookPack` / `AdventureModule` 增加 `knowledge_pack_dir`
-- [ ] 冒烟测试：`AKP_ENABLED=true` 下用 PHB / 克仑可 docx 跑通建包 + 提取
+- [x] Vendoring：`pack-builder/` → `third_party/akp/`，保留 LICENSE
+- [x] `data/knowledge_packs/` 加入 `.gitignore`
+- [x] `Settings` 增加 `AKP_*` 配置项（默认 `AKP_ENABLED=false`）
+- [x] 新增 `akp_client.py`（`is_enabled` / `build_pack` / `research`(=bundle) / `_parse_bundle`）
+- [x] `RulebookExtractionInput` / `ModuleExtractionInput` 增加 `evidence_bundles`
+- [x] `content_ingestion_service` 接入"build → bundle → 提炼"（含失败自动回退）
+- [x] `RulebookPack` / `AdventureModule` 增加 `knowledge_pack_dir`
+- [x] 冒烟测试：`backend/scripts/test_akp_integration.py`（开关开/关行为一致，M1 通过）
 
 ### P1 — 出处与运行时查询（模式 B，2–3 天）
 

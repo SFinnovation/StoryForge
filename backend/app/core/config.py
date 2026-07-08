@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     AI_ENABLE_CRITIC: bool = True
     AI_FALLBACK_ON_CRITIC_FAIL: bool = True
 
+    # AKP 知识引擎（Auditable Knowledge Packs）— 见 docs/akp-integration-plan.md
+    AKP_ENABLED: bool = False                    # 总开关，默认关闭 → 走现有纯 LLM 路径
+    AKP_ROOT: str = "third_party/akp"            # build_skill.py / templates 所在目录（相对项目根）
+    AKP_PACKS_DIR: str = "data/knowledge_packs"  # 生成的 skill 包根目录（相对项目根）
+    AKP_PYTHON: str = ""                         # 运行 AKP 的解释器；留空使用当前 sys.executable
+    AKP_RESEARCH_TIMEOUT_MS: int = 30000         # 单次 bundle 检索超时保护
+    AKP_BUILD_TIMEOUT_S: int = 600               # 建包超时
+    AKP_BUNDLE_PRESET: str = "standard"          # bundle 输出预算：quick | standard
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -70,6 +70,7 @@ class RulebookPack(Base):
     public_world_facts_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     core_rules_summary: Mapped[str | None] = mapped_column(Text)
     extraction_notes: Mapped[str | None] = mapped_column(Text)
+    knowledge_pack_dir: Mapped[str | None] = mapped_column(String(500))  # AKP skill 包目录
     status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -94,6 +95,7 @@ class AdventureModule(Base):
     visible_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     seed_npcs_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     extraction_notes: Mapped[str | None] = mapped_column(Text)
+    knowledge_pack_dir: Mapped[str | None] = mapped_column(String(500))  # AKP skill 包目录
     status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

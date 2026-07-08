@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.app.ai.schemas.character import CharacterCard, WorldContext
 from backend.app.ai.schemas.critic import CriticOutput
@@ -39,6 +39,20 @@ class StateUpdates(BaseModel):
     task_updates: list[TaskUpdate] = Field(default_factory=list)
     new_facts: list[dict] = Field(default_factory=list)
 
+    @field_validator("new_facts", mode="before")
+    @classmethod
+    def _normalize_new_facts(cls, value: object) -> list[dict]:
+        """兼容 LLM 返回字符串数组：将字符串项规范化为 {"content": ...} dict。"""
+        if not isinstance(value, list):
+            return []
+        normalized: list[dict] = []
+        for item in value:
+            if isinstance(item, dict):
+                normalized.append(item)
+            elif isinstance(item, str) and item.strip():
+                normalized.append({"content": item.strip(), "fact_type": "session_fact"})
+        return normalized
+
 
 class NarrativeInput(BaseModel):
     """主叙事 Agent 输入 — 判定结果由后端传入，AI 不得修改。"""
@@ -65,6 +79,21 @@ class NarrativeOutput(BaseModel):
     new_clues: list[NewClue] = Field(default_factory=list)
     state_updates: StateUpdates = Field(default_factory=StateUpdates)
     next_options: list[str] = Field(default_factory=list)
+
+    @field_validator("new_clues", mode="before")
+    @classmethod
+    def _normalize_new_clues(cls, value: object) -> list:
+        """兼容 LLM 返回字符串数组：将字符串项规范化为 NewClue 所需 dict。"""
+        if not isinstance(value, list):
+            return []
+        normalized: list = []
+        for item in value:
+            if isinstance(item, dict):
+                normalized.append(item)
+            elif isinstance(item, str) and item.strip():
+                text = item.strip()
+                normalized.append({"title": text[:20], "content": text})
+        return normalized
 
 
 class NarrativeWithReviewResult(BaseModel):

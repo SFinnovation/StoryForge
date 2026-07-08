@@ -12,8 +12,8 @@ from backend.app.ai.schemas.rulebook_extract import RulebookExtractionOutput
 from backend.app.models.models import AdventureModule, RulebookPack, World
 
 
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _now() -> datetime:
+    return datetime.utcnow()
 
 
 def save_rulebook_pack(
@@ -21,6 +21,7 @@ def save_rulebook_pack(
     output: RulebookExtractionOutput,
     *,
     source_filename: str | None = None,
+    knowledge_pack_dir: str | None = None,
 ) -> RulebookPack:
     pack = RulebookPack(
         title=output.title,
@@ -32,6 +33,7 @@ def save_rulebook_pack(
         ),
         core_rules_summary=output.core_rules_summary,
         extraction_notes=output.extraction_notes,
+        knowledge_pack_dir=knowledge_pack_dir,
         status="active",
         created_at=_now(),
     )
@@ -45,6 +47,7 @@ def save_adventure_module(
     output: ModuleExtractionOutput,
     *,
     source_filename: str | None = None,
+    knowledge_pack_dir: str | None = None,
 ) -> AdventureModule:
     module = AdventureModule(
         title=output.title,
@@ -63,6 +66,7 @@ def save_adventure_module(
         visible_npcs_json=json.dumps([n.model_dump() for n in output.visible_npcs], ensure_ascii=False),
         seed_npcs_json=json.dumps([n.model_dump() for n in output.seed_npcs], ensure_ascii=False),
         extraction_notes=output.extraction_notes,
+        knowledge_pack_dir=knowledge_pack_dir,
         status="active",
         created_at=_now(),
     )

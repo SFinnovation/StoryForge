@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from backend.app.models.models import Fact, NpcProfile
 
 
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _now() -> datetime:
+    return datetime.utcnow()
 
 
 def create_fact(

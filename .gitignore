@@ -85,6 +85,8 @@ dnd5e-6.0.x.zip
 
 # AKP 生成物（knowledge pack 可由 docx 幂等重建，不入库）
 data/knowledge_packs/
+# AKP 源文档（规则书/模组 docx，属版权材料且体积大，仅作本地输入，不入库）
+packs/
 # AKP 解压临时目录
 .akp_tmp/
 .akp_smoke/
