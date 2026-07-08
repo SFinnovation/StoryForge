@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""初始化建表 — 基于 ORM 元数据创建全部 9 张表与索引
+"""初始化建表 — 基于 ORM 元数据创建全部 12 张表与索引
 
 用法:
     python -m app.db.init_db          # 建表(已存在则跳过)
@@ -20,6 +20,11 @@ INDEXES = [
     Index("idx_clues_session", models.Clue.session_id),
     Index("idx_tasks_session_status", models.Task.session_id, models.Task.status),
     Index("idx_characters_user", models.Character.user_id),
+    # ---- AI 模块扩展表 (ai-module-design §11) ----
+    # memory_retriever 按会话+类型取 Fact; context_builder 按场景取可见 NPC
+    Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
+    Index("idx_npc_profiles_session_scene", models.NpcProfile.session_id, models.NpcProfile.related_scene),
+    Index("idx_ai_reviews_session", models.AiReview.session_id, models.AiReview.created_at),
 ]
 
 
