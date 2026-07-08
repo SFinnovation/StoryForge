@@ -16,7 +16,7 @@
 6. [数据模型](#6-数据模型)
 7. [API 规范](#7-api-规范)
 8. [核心业务流程](#8-核心业务流程)
-9. [AI 模块规范](#9-ai-模块规范)
+9. [AI 模块规范](#9-ai-模块规范) → 详见 **[ai-module-design.md](ai-module-design.md)**
 10. [前端实现清单](#10-前端实现清单)
 11. [后端实现清单](#11-后端实现清单)
 12. [环境配置与本地启动](#12-环境配置与本地启动)
@@ -689,15 +689,38 @@ CREATE INDEX idx_action_checks_session ON action_checks(session_id);
       "result_text": "d20(11) + 敏捷(+3) + 熟练(+2) = 16 ≥ DC 15，成功"
     },
     "story": {
+      "message_id": 103,
       "narration": "你压低脚步，从阴影中穿过。守卫似乎听到了什么，但他只是回头看了一眼，并没有发现你。",
+      "visible_result": "潜行成功，未引起注意。",
       "new_clues": [],
       "task_updates": [],
-      "status_changes": [],
       "next_options": ["继续跟踪守卫", "调查走廊尽头的房间", "返回大厅"]
-    }
+    },
+    "session_meta": {
+      "current_scene": "古堡东侧走廊",
+      "clue_pressure": 0.45,
+      "turns_since_key_clue": 2
+    },
+    "ai_review": {
+      "approved": true,
+      "overall_score": 86,
+      "revision_count": 0,
+      "used_fallback": false
+    },
+    "meta": { "tokens_used": 1240, "latency_ms": 3200 }
   }
 }
 ```
+
+> 完整字段说明见 [ai-module-design §10.1](ai-module-design.md#101-核心提交行动扩展响应)。
+
+#### AI 模块扩展（P1 预留）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/sessions/{id}/meta` | clue_pressure、场景元数据 |
+| GET | `/sessions/{id}/facts` | `?scope=player_known` |
+| GET | `/sessions/{id}/ai-reviews` | 审核记录列表 |
 
 #### 报告
 
@@ -731,25 +754,34 @@ CREATE INDEX idx_action_checks_session ON action_checks(session_id);
 前端：router.push(/sessions/:id/play)
 ```
 
-### 8.2 行动流程（时序）
+### 8.2 行动流程（双 Agent 时序）
 
 ```
-Frontend          API              ai_service        dice_service       DB
-   │ POST /action   │                    │                  │              │
-   │───────────────►│ load session       │                  │              │
-   │                │──────────────────────────────────────────────────────►│
-   │                │ parse_action       │                  │              │
-   │                │───────────────────►│                  │              │
-   │                │◄───────────────────│ JSON: type, attr, dc             │
-   │                │ roll & judge       │                  │              │
-   │                │─────────────────────────────────────►│              │
-   │                │◄─────────────────────────────────────│              │
-   │                │ narrate(check)     │                  │              │
-   │                │───────────────────►│                  │              │
-   │                │ persist all        │                  │              │
-   │                │──────────────────────────────────────────────────────►│
-   │◄───────────────│ response           │                  │              │
+Frontend       API/Orchestrator    ActionParser   RuleEngine   ContextBuilder
+   │ POST/action      │                 │              │              │
+   │─────────────────►│ parse           │              │              │
+   │                  │────────────────►│              │              │
+   │                  │◄────────────────│              │              │
+   │                  │ roll_check      │              │              │
+   │                  │───────────────────────────────►│              │
+   │                  │◄───────────────────────────────│              │
+   │                  │ build_context + clue_pressure  │              │
+   │                  │──────────────────────────────────────────────►│
+   │                  │◄──────────────────────────────────────────────│
+
+NarrativeAgent   CriticAgent   RevisionLoop   StateCommitter   DB
+      │               │              │              │           │
+      │ generate      │              │              │           │
+      │──────────────►│ review       │              │           │
+      │◄──────────────│              │              │           │
+      │  (loop ≤2)    │              │              │           │
+      │──────────────────────────────►│ commit     │           │
+      │                              │────────────►│           │
+      │                              │             │──────────►│
+   │◄──────────────────────────────────────────────────────────│
 ```
+
+详见 [ai-module-design.md §2](ai-module-design.md#2-总体架构)。
 
 ### 8.3 结束流程
 
@@ -771,81 +803,58 @@ Frontend          API              ai_service        dice_service       DB
 
 ## 9. AI 模块规范
 
-### 9.1 设计原则
+> **完整设计**见 **[ai-module-design.md](ai-module-design.md)**（双 Agent、Fact 分层、clue_pressure、全量接口）。  
+> **实现说明**见 **[ai-module-implementation.md](ai-module-implementation.md)**（五 Agent 代码、DB 交互、API 对接、测试）。  
+> Prompt：`backend/app/ai/prompts/` · DDL：`数据库存储结构设计.sql` §11
 
-1. **所有 AI 输出必须为 JSON**，后端 Pydantic 校验后再落库  
-2. **骰子由后端生成**，Prompt 中明确禁止 AI 输出 random 值  
-3. **上下文截断**：传给 AI 的历史消息保留最近 N 条 + 会话摘要（防 token 爆炸）  
-4. **失败兜底**：AI 超时或 JSON 解析失败时，使用 `ai_service.fallback_narration()`
-
-### 9.2 Prompt 文件组织
+### 9.1 架构概要
 
 ```
-backend/app/prompts/
-├── opening.txt       # 开局生成
-├── action_parse.txt  # 行动理解
-├── narrate.txt       # 判定后叙事
-└── report.txt        # 本局总结
+Action Parser → Rule Engine（后端，非 LLM）
+  → Context Builder → Narrative Agent → Critic Agent → Revision Loop（≤2 次）
+  → State Committer → DB
 ```
 
-### 9.3 行动理解 — 输出 Schema
+**硬约束**：Agent 不掷骰、不直接写库；辅 Agent 可见 hidden_truth 用于检测泄露。
 
-```json
-{
-  "action_type": "stealth",
-  "skill_key": "ste",
-  "check_type": "隐匿",
-  "attribute_used": "dexterity",
-  "suggested_dc": 15,
-  "needs_check": true,
-  "reason": "玩家试图绕过守卫，属于敏捷相关的隐匿动作"
-}
-```
+### 9.2 MVP 模块清单
 
-- `skill_key` 必须为 `skills.json` 中的键（如 `ste`、`inv`）
-- `needs_check: false` 时跳过掷骰（纯对话、查看已有线索等）
-- `attribute_used` 枚举：`strength | dexterity | constitution | intelligence | wisdom | charisma`
+| 模块 | P0 | 职责 |
+|------|-----|------|
+| Action Parser | ✅ | 解析行动 → skill_key / suggested_dc |
+| Rule Engine | ✅ | 后端 d20（`rule_service`） |
+| Context Builder | ✅ | 可见性裁剪 + clue_pressure |
+| Narrative Agent | ✅ | 据 rule_result 生成剧情 |
+| Critic Agent | ✅ | 六维审核 + revision_instructions |
+| Revision Loop | ✅ | 最多 2 次修正 + fallback |
+| State Committer | ✅ | 校验 state_updates 后落库 |
+| Summary Agent | ✅ | 本局战报 |
 
-### 9.4 剧情推进 — 输出 Schema
+### 9.3 扩展 REST API（预留）
 
-```json
-{
-  "narration": "你压低脚步，从阴影中穿过……",
-  "new_clues": [
-    { "title": "脚印", "content": "通往地下室", "importance": "important" }
-  ],
-  "task_updates": [
-    { "title": "调查失踪学者", "status": "doing" }
-  ],
-  "status_changes": [
-    { "field": "hp", "delta": -2, "reason": "踩中陷阱" }
-  ],
-  "next_options": ["继续跟踪", "调查房间", "返回大厅"]
-}
-```
+| 方法 | 路径 | 优先级 |
+|------|------|--------|
+| POST | `/sessions/{id}/action` | P0（响应含 `ai_review`、`session_meta`） |
+| GET | `/sessions/{id}/meta` | P1 |
+| GET | `/sessions/{id}/facts?scope=player_known` | P1 |
+| GET | `/sessions/{id}/ai-reviews` | P1 |
 
-### 9.5 本局总结 — 输出 Schema
+请求/响应全文见 [ai-module-design §10](ai-module-design.md#10-rest-api-接口前后端联调)。
 
-```json
-{
-  "title": "古堡阴影下的低语",
-  "story_summary": "本局中，玩家进入古堡并发现……",
-  "key_choices": ["成功绕过守卫", "发现地下室入口"],
-  "ending_type": "open",
-  "character_growth": "获得 50 点经验，洞察 +1",
-  "next_suggestion": "下一局可探索封印房间"
-}
-```
+### 9.4 新增数据表
 
-### 9.6 AI 配置项（.env）
+`facts` · `npc_profiles` · `npc_memories` · `ai_reviews` · `game_sessions.clue_pressure`
 
-| 变量 | 说明 |
-|------|------|
-| `LLM_API_BASE` | API 基址 |
-| `LLM_API_KEY` | 密钥 |
-| `LLM_MODEL` | 模型名 |
-| `LLM_TIMEOUT` | 超时秒数，建议 30 |
-| `LLM_MAX_TOKENS` | 单次最大 token |
+### 9.5 环境变量
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `AI_MAX_REVISIONS` | 2 | 最大修正次数 |
+| `AI_CRITIC_PASS_SCORE` | 80 | 审核通过线 |
+| `AI_ENABLE_CRITIC` | true | 是否启用辅 Agent |
+| `AI_CONTEXT_MESSAGE_LIMIT` | 20 | 上下文消息条数 |
+
+完整 LLM 与 AI 配置见 `.env.example`。
 
 ---
 
@@ -895,7 +904,10 @@ interface SessionState {
   messages: Message[]
   clues: Clue[]
   tasks: Task[]
-  isSubmitting: boolean   // 行动提交中，防重复点击
+  facts: Fact[]                    // P1：player_known
+  sessionMeta: SessionMeta | null  // P1：clue_pressure
+  lastAiReview: AiReview | null    // P1：审核摘要
+  isSubmitting: boolean
 }
 ```
 
