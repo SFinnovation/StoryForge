@@ -11,7 +11,23 @@ StoryForge 旨在帮助创作者高效地构思、编写、组织与管理故事
 - [ ] 角色与世界观设定
 - [ ] 版本历史与导出
 
+<<<<<<< HEAD
 > 以上为初步规划，可根据实际需求调整。
+=======
+- [ ] 用户登录/注册
+- [ ] 世界观选择与 **D&D 5e 角色创建**（种族/职业/背景/技能/属性雷达图）
+- [x] AI 开局剧情生成（OpeningAgent）
+- [ ] 跑团主界面（三栏：状态 / 对话 / 骰子与日志）
+- [x] 行动判定（ActionParser + d20 + Narrative + Critic）
+- [x] 本局总结报告（SummaryAgent）
+
+### P1（加分）
+
+- [ ] 线索与任务面板
+- [ ] 历史档案
+- [ ] ECharts 统计图表
+- [ ] 管理端数据展示
+>>>>>>> 38f0109237ad6b65c9edd640994015f91dcc4f4e
 
 ## 快速开始
 
@@ -29,6 +45,14 @@ cd StoryForge
 
 | 文档 | 说明 |
 |------|------|
+<<<<<<< HEAD
+=======
+| [AI 模块实现说明](docs/ai-module-implementation.md) | **五 Agent 实现**、DB 交互、API、测试指南 |
+| [AI 模块设计](docs/ai-module-design.md) | 双 Agent 架构、Fact 分层、接口规格 |
+| [实现规格书](docs/implementation-spec.md) | API、DDL、里程碑 |
+| [D&D 5e 规则整合](docs/dnd5e-integration.md) | SRD 规则数据与角色创建流程 |
+| [架构设计](docs/architecture.md) | 系统分层与模块划分 |
+>>>>>>> 38f0109237ad6b65c9edd640994015f91dcc4f4e
 | [快速开始](docs/getting-started.md) | 环境准备与本地运行 |
 | [架构设计](docs/architecture.md) | 系统结构与模块划分 |
 | [开发指南](docs/development.md) | 分支、提交与代码规范 |
