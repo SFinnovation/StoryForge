@@ -1,5 +1,13 @@
 # 架构设计
 
+## 2026-07-08 架构补充
+
+- API 层新增 `backend/app/api/v1/admin.py`，统一提供 `/api/v1/admin` 管理员后台接口。
+- 权限层新增 `get_current_admin_user()`，管理员接口必须携带管理员 Bearer token；普通用户被封禁后不能登录，也不能继续使用带 token 的普通接口。
+- 数据库扩展后台管理表：`world_modules` 管理世界观下模组，`admin_operation_logs` 记录管理员操作。
+- `users` 表补充 `email` 与 `status`，账号状态支持 `active` / `banned`。
+- 前端仍无管理员页面；当前仅后端与数据库已准备好，等待前端管理后台对接。
+
 > 本文档描述当前仓库的实际架构与模块边界。更完整的目标规格见 [implementation-spec.md](implementation-spec.md)，逐模块检查见 [module-audit.md](module-audit.md)。
 
 ## 概述

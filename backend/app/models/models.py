@@ -23,14 +23,20 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     nickname: Mapped[str | None] = mapped_column(String(50))
+    email: Mapped[str | None] = mapped_column(String(255), unique=True)
     role: Mapped[str] = mapped_column(String(10), default="user", nullable=False)
+    status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     characters: Mapped[list["Character"]] = relationship(back_populates="user")
     sessions: Mapped[list["GameSession"]] = relationship(back_populates="user")
+    admin_logs: Mapped[list["AdminOperationLog"]] = relationship(back_populates="admin")
 
-    __table_args__ = (CheckConstraint("role IN ('user','admin')", name="ck_users_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('user','admin')", name="ck_users_role"),
+        CheckConstraint("status IN ('active','banned')", name="ck_users_status"),
+    )
 
 
 class World(Base):
@@ -49,8 +55,28 @@ class World(Base):
     is_enabled: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    modules: Mapped[list["WorldModule"]] = relationship(back_populates="world")
+
     __table_args__ = (
         CheckConstraint("type IN ('fantasy','mystery','cyberpunk','custom')", name="ck_worlds_type"),
+    )
+
+
+class WorldModule(Base):
+    __tablename__ = "world_modules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey("worlds.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    is_enabled: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    world: Mapped["World"] = relationship(back_populates="modules")
+
+    __table_args__ = (
+        CheckConstraint("is_enabled IN (0, 1)", name="ck_world_modules_enabled"),
     )
 
 
@@ -338,3 +364,17 @@ class AiReview(Base):
         CheckConstraint("overall_score BETWEEN 0 AND 100", name="ck_reviews_score"),
         CheckConstraint("used_fallback IN (0, 1)", name="ck_reviews_fallback"),
     )
+
+
+class AdminOperationLog(Base):
+    __tablename__ = "admin_operation_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    admin_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_type: Mapped[str | None] = mapped_column(String(50))
+    target_id: Mapped[int | None] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    admin: Mapped["User"] = relationship(back_populates="admin_logs")

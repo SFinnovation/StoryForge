@@ -43,6 +43,7 @@ app.add_middleware(
 @app.exception_handler(StoryForgeError)
 async def storyforge_error_handler(request: Request, exc: StoryForgeError):
     code_map = {
+        401: 40101,
         404: 40401,
         403: 40301,
         409: 40901,

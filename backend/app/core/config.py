@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-use-a-long-random-string-in-production"
     JWT_EXPIRE_MINUTES: int = 1440
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
 
     # LLM
     LLM_API_BASE: str = "https://api.deepseek.com/v1"

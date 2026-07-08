@@ -56,12 +56,6 @@ const menuItems = computed(() => [
     desc: '先体验大厅',
     active: false,
     action: handleGuestEnter
-  },
-  {
-    label: '继续上次冒险',
-    desc: '读取最近会话',
-    active: false,
-    action: handleGuestEnter
   }
 ])
 
@@ -543,7 +537,7 @@ if (rememberedUser.value) {
 }
 
 .brand-section {
-  margin-bottom: 32px;
+  margin-bottom: 0;
 }
 
 .brand-icon {
@@ -580,20 +574,24 @@ if (rememberedUser.value) {
 .menu-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 28px;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 300px);
+  margin: auto auto 26px;
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  gap: 12px;
   width: 100%;
-  padding: 12px 16px;
+  min-height: 50px;
+  padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
   color: #d7d0c1;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: all 0.25s ease;
   border-radius: 8px;
@@ -610,8 +608,8 @@ if (rememberedUser.value) {
 }
 
 .menu-item-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -619,8 +617,8 @@ if (rememberedUser.value) {
 }
 
 .menu-item-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .menu-item.active .menu-item-icon {
@@ -628,18 +626,17 @@ if (rememberedUser.value) {
 }
 
 .menu-item-label {
-  flex: 1;
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: 0.06em;
 }
 
 .menu-item-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(215, 208, 193, 0.5);
 }
 
 .form-section {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
 }
@@ -779,6 +776,7 @@ if (rememberedUser.value) {
 .footer-section {
   display: flex;
   justify-content: space-around;
+  margin-top: auto;
   padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -825,7 +823,8 @@ if (rememberedUser.value) {
   }
 
   .menu-item {
-    padding: 10px 14px;
+    min-height: 48px;
+    padding: 9px 12px;
   }
 }
 </style>

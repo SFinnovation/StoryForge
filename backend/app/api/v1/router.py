@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
-from backend.app.api.v1 import auth, chapters, characters, export, rules, sessions, stories, worldbuilding, worlds
+from backend.app.api.v1 import admin, auth, chapters, characters, export, rules, sessions, stories, worldbuilding, worlds
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router)
+api_router.include_router(admin.router)
 api_router.include_router(rules.router)
 api_router.include_router(sessions.router)
 api_router.include_router(worlds.router)

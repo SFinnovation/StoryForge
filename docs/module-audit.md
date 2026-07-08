@@ -1,5 +1,21 @@
 # 模块检查报告
 
+## 2026-07-08 进度补充
+
+| 模块 | 当前状态 | 结论 |
+|------|----------|------|
+| 前端 API 联调 | 已推进 | 登录/注册、世界观、角色、会话、档案读取等主流程已接入现有后端接口 |
+| 前端导航与登录页 | 已调整 | 顶栏文字入口已移除，登录注册页移除“继续上次冒险”，并导出静态 HTML 供外部编辑 |
+| 管理员后台后端 | 已实现第一版 | 新增 `/api/v1/admin` 接口组，覆盖世界观/模组、会话记录、用户、操作日志 |
+| 管理员后台前端 | 待接入 | 当前只完成数据库与后端逻辑，前端管理页面等待后续对接 |
+| 数据库 | 已扩展 | 新增 `world_modules`、`admin_operation_logs`，`users` 补充 `email/status` |
+
+本轮新增验证：
+
+- `.venv\Scripts\python.exe -m backend.scripts.test_admin_api`
+- `.venv\Scripts\python.exe -m backend.scripts.test_frontend_contract`
+- `.venv\Scripts\python.exe -m compileall backend`
+
 > 检查日期：2026-07-08  
 > 范围：按当前文件结构核对文档要求、实现状态与可运行性。本文不替代实现规格书，而是给团队一个“现在仓库到底到哪了”的快照。
 

@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     nickname      TEXT,
+    email         TEXT UNIQUE,
     role          TEXT NOT NULL DEFAULT 'user'
                   CHECK (role IN ('user', 'admin')),
+    status        TEXT NOT NULL DEFAULT 'active'
+                  CHECK (status IN ('active', 'banned')),
     avatar_url    TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -46,6 +49,16 @@ CREATE TABLE IF NOT EXISTS worlds (
 --    race_id / class_id / background_id 对应 rules/dnd5e/*.json 的 id
 --    skills_json 例: {"ste":{"proficient":true}}  键为 skills.json 的技能键
 -- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS world_modules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    world_id    INTEGER NOT NULL REFERENCES worlds(id),
+    name        TEXT NOT NULL,
+    description TEXT,
+    created_by  INTEGER REFERENCES users(id),
+    is_enabled  INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS characters (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id            INTEGER NOT NULL REFERENCES users(id),
@@ -186,6 +199,16 @@ CREATE TABLE IF NOT EXISTS reports (
 -- ------------------------------------------------------------
 -- 索引（规格书 §6.3 + 面向 P1 查询的补充）
 -- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_operation_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id    INTEGER NOT NULL REFERENCES users(id),
+    action      TEXT NOT NULL,
+    target_type TEXT,
+    target_id   INTEGER,
+    description TEXT NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user_status  ON game_sessions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_messages_session      ON messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_action_checks_session ON action_checks(session_id);
@@ -193,6 +216,9 @@ CREATE INDEX IF NOT EXISTS idx_action_checks_session ON action_checks(session_id
 CREATE INDEX IF NOT EXISTS idx_clues_session         ON clues(session_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_session_status  ON tasks(session_id, status);
 CREATE INDEX IF NOT EXISTS idx_characters_user       ON characters(user_id);
+CREATE INDEX IF NOT EXISTS idx_world_modules_world_enabled ON world_modules(world_id, is_enabled);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_created    ON admin_operation_logs(admin_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_target           ON admin_operation_logs(target_type, target_id);
 
 -- ============================================================
 -- §11 AI 模块扩展表 (依据 ai-module-design.md §4 / §6.5 / §11.2)

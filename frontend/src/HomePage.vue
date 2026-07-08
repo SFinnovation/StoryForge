@@ -21,7 +21,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['navigate', 'session-created'])
+const emit = defineEmits(['navigate', 'session-created', 'logout'])
 
 const showCreateModal = ref(false)
 const showJoinModal = ref(false)
@@ -43,7 +43,7 @@ const createRoomForm = reactive({
   difficulty: 'normal'
 })
 
-const navItems = ['大厅', '世界观', '档案', '商城']
+const navItems = []
 
 const actionCards = [
   {
@@ -343,10 +343,11 @@ onMounted(refreshLobbyData)
             <path d="m4 7 8 6 8-6" />
           </svg>
         </button>
-        <button class="nav-icon" aria-label="设置">
+        <button class="nav-icon" aria-label="退出登录" @click="emit('logout')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.82l.05.06a2 2 0 1 1-2.83 2.83l-.06-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.53V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.52 1.7 1.7 0 0 0-1.9.36l-.06.05a2 2 0 1 1-2.83-2.83l.05-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1H3a2 2 0 1 1 0-4h.08A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.82l-.05-.06a2 2 0 1 1 2.83-2.83l.06.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.52V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.52 1.7 1.7 0 0 0 1.9-.36l.06-.05a2 2 0 1 1 2.83 2.83l-.05.06A1.7 1.7 0 0 0 19.4 9c.14.47.66.8 1.15.8H21a2 2 0 1 1 0 4h-.45c-.49 0-1.01.33-1.15.8Z" />
+            <path d="M10 17l5-5-5-5" />
+            <path d="M15 12H3" />
+            <path d="M21 3v18h-8" />
           </svg>
         </button>
       </div>

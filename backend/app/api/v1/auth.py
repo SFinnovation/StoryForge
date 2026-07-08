@@ -15,6 +15,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=6, max_length=128)
     nickname: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
 
 
 class LoginRequest(BaseModel):
@@ -27,7 +28,9 @@ def _user_payload(user: User) -> dict:
         "id": user.id,
         "username": user.username,
         "nickname": user.nickname,
+        "email": user.email,
         "role": user.role,
+        "status": user.status,
         "avatar_url": user.avatar_url,
     }
 
@@ -45,11 +48,17 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db_session)):
     exists = db.query(User).filter(User.username == payload.username).first()
     if exists is not None:
         raise StoryForgeError("username already exists", status_code=409)
+    if payload.email:
+        email_exists = db.query(User).filter(User.email == payload.email).first()
+        if email_exists is not None:
+            raise StoryForgeError("email already exists", status_code=409)
     user = User(
         username=payload.username,
         password_hash=hash_password(payload.password),
         nickname=payload.nickname or payload.username,
+        email=payload.email,
         role="user",
+        status="active",
     )
     db.add(user)
     db.commit()
@@ -62,6 +71,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db_session)):
     user = db.query(User).filter(User.username == payload.username).first()
     if user is None or not verify_password(payload.password, user.password_hash):
         raise StoryForgeError("invalid username or password", status_code=401)
+    if user.status != "active":
+        raise StoryForgeError("account is banned", status_code=403)
     return success(_token_payload(user), message="logged in")
 
 

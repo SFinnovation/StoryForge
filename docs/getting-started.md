@@ -1,5 +1,22 @@
 # 快速开始
 
+## 2026-07-08 补充说明
+
+后端启动时会自动确保开发管理员账号存在，默认值来自 `.env`：
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
+```
+
+管理员后端接口文档见 [admin-backend.md](admin-backend.md)。管理员接口统一挂载在 `/api/v1/admin`，需要先通过 `/api/v1/auth/login` 获取管理员 Bearer token。
+
+建议额外运行管理员接口验证：
+
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.test_admin_api
+```
+
 本文档说明如何在本地准备并运行 StoryForge。当前后端主闭环已实现，前端仍是静态原型，联调层待补齐。
 
 ## 前置要求

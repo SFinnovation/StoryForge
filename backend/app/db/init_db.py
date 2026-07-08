@@ -7,8 +7,10 @@
 """
 import sys
 
-from sqlalchemy import Index
+from sqlalchemy import Index, inspect, text
 
+from backend.app.core.config import settings
+from backend.app.services.auth_service import hash_password
 from backend.app.db.database import Base, SessionLocal, engine
 from backend.app.models import models  # noqa: F401  确保所有模型注册到 Base.metadata
 
@@ -20,6 +22,9 @@ INDEXES = [
     Index("idx_clues_session", models.Clue.session_id),
     Index("idx_tasks_session_status", models.Task.session_id, models.Task.status),
     Index("idx_characters_user", models.Character.user_id),
+    Index("idx_world_modules_world_enabled", models.WorldModule.world_id, models.WorldModule.is_enabled),
+    Index("idx_admin_logs_admin_created", models.AdminOperationLog.admin_id, models.AdminOperationLog.created_at),
+    Index("idx_admin_logs_target", models.AdminOperationLog.target_type, models.AdminOperationLog.target_id),
     # ---- AI 模块扩展表 (ai-module-design §11) ----
     # memory_retriever 按会话+类型取 Fact; context_builder 按场景取可见 NPC
     Index("idx_facts_session_type", models.Fact.session_id, models.Fact.fact_type),
@@ -28,6 +33,26 @@ INDEXES = [
 ]
 
 DEMO_USER_ID = 1
+
+
+def _ensure_legacy_columns() -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    statements: list[str] = []
+    if "email" not in user_columns:
+        statements.append("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
+    if "status" not in user_columns:
+        statements.append("ALTER TABLE users ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active'")
+
+    if not statements:
+        return
+
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
 
 
 def _ensure_demo_user(db) -> None:
@@ -40,8 +65,28 @@ def _ensure_demo_user(db) -> None:
             password_hash="demo",
             nickname="Demo User",
             role="user",
+            status="active",
         )
     )
+
+
+def _ensure_admin_user(db) -> None:
+    admin = db.query(models.User).filter(models.User.username == settings.ADMIN_USERNAME).first()
+    if admin is None:
+        db.add(
+            models.User(
+                username=settings.ADMIN_USERNAME,
+                password_hash=hash_password(settings.ADMIN_PASSWORD),
+                nickname="管理员",
+                role="admin",
+                status="active",
+            )
+        )
+        return
+
+    admin.role = "admin"
+    if getattr(admin, "status", None) != "active":
+        admin.status = "active"
 
 
 def init_db(drop_first: bool = False) -> None:
@@ -49,8 +94,10 @@ def init_db(drop_first: bool = False) -> None:
         Base.metadata.drop_all(bind=engine)
         print("已删除所有旧表")
     Base.metadata.create_all(bind=engine)
+    _ensure_legacy_columns()
     with SessionLocal() as db:
         _ensure_demo_user(db)
+        _ensure_admin_user(db)
         db.commit()
     tables = sorted(Base.metadata.tables.keys())
     print(f"建表完成({len(tables)} 张): {', '.join(tables)}")

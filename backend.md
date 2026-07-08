@@ -1,5 +1,38 @@
 # 后端开发进度与接口契约
 
+## 2026-07-08 管理员后台补充
+
+后端已新增管理员后台数据库与接口逻辑，详见 [docs/admin-backend.md](docs/admin-backend.md)。
+
+新增数据结构：
+
+- `users.email`、`users.status`
+- `world_modules`
+- `admin_operation_logs`
+
+新增接口前缀：
+
+- `/api/v1/admin/summary`
+- `/api/v1/admin/worlds`
+- `/api/v1/admin/worlds/{world_id}/modules`
+- `/api/v1/admin/modules/{module_id}`
+- `/api/v1/admin/sessions`
+- `/api/v1/admin/sessions/{session_id}`
+- `/api/v1/admin/sessions/{session_id}/dissolve`
+- `/api/v1/admin/users`
+- `/api/v1/admin/users/{user_id}/reset-password`
+- `/api/v1/admin/users/{user_id}/ban`
+- `/api/v1/admin/users/{user_id}/unban`
+- `/api/v1/admin/operation-logs`
+
+本轮验证：
+
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.test_admin_api
+.venv\Scripts\python.exe -m backend.scripts.test_frontend_contract
+.venv\Scripts\python.exe -m compileall backend
+```
+
 > 本文档同步当前后端真实状态。完整目标规格见 [docs/implementation-spec.md](docs/implementation-spec.md)，逐模块检查见 [docs/module-audit.md](docs/module-audit.md)。
 
 ## 当前结论
