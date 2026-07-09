@@ -1,18 +1,23 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { authApi, clearAuth, getStoredToken, getStoredUser } from './api/client'
+import { destroyStoryAudio, initStoryAudio, setMusicScene } from './audio/storyAudio'
 import HomePage from './HomePage.vue'
 import ScriptPage from './ScriptPage.vue'
 import ArchivePage from './ArchivePage.vue'
 import RolePage from './RolePage.vue'
 import GameRoomPage from './GameRoomPage.vue'
+import EndingPage from './EndingPage.vue'
 import LoginRegister from './LoginRegister.vue'
+import SettingsModal from './SettingsModal.vue'
+import AdminPage from './AdminPage.vue'
 
 const PAGE_HOME = 'home'
 const PAGE_SCRIPT = 'script'
 const PAGE_ARCHIVE = 'archive'
 const PAGE_ROLE = 'role'
 const PAGE_ROOM = 'room'
+const PAGE_ENDING = 'ending'
 
 const currentPage = ref(PAGE_HOME)
 const selectedWorldview = ref(null)
@@ -21,15 +26,18 @@ const isBootstrapping = ref(isAuthenticated.value)
 const currentUser = ref(getStoredUser())
 const latestSession = ref(null)
 const currentRoomId = ref(null)
+const latestEnding = ref(null)
 const pageHistory = ref([])
 const isBackButtonHidden = ref(false)
+const isSettingsOpen = ref(false)
 
 const pageComponentMap = {
   [PAGE_HOME]: HomePage,
   [PAGE_SCRIPT]: ScriptPage,
   [PAGE_ARCHIVE]: ArchivePage,
   [PAGE_ROLE]: RolePage,
-  [PAGE_ROOM]: GameRoomPage
+  [PAGE_ROOM]: GameRoomPage,
+  [PAGE_ENDING]: EndingPage
 }
 
 const pageAliasMap = {
@@ -42,12 +50,23 @@ const pageAliasMap = {
   role: PAGE_ROLE,
   角色: PAGE_ROLE,
   room: PAGE_ROOM,
-  房间: PAGE_ROOM
+  房间: PAGE_ROOM,
+  ending: PAGE_ENDING,
+  结局: PAGE_ENDING
 }
 
 const activeComponent = computed(() => pageComponentMap[currentPage.value] || HomePage)
+const isAdminUser = computed(() => currentUser.value?.role === 'admin')
+const musicScene = computed(() => {
+  if (!isAuthenticated.value) return 'login'
+  if (isAdminUser.value) return null
+  if ([PAGE_HOME, PAGE_SCRIPT].includes(currentPage.value)) return PAGE_SCRIPT
+  if ([PAGE_ROLE, PAGE_ROOM].includes(currentPage.value)) return currentPage.value
+  return null
+})
 const shouldShowBackButton = computed(() =>
   isAuthenticated.value &&
+  !isAdminUser.value &&
   currentPage.value !== PAGE_HOME &&
   currentPage.value !== PAGE_ROOM &&
   !isBackButtonHidden.value
@@ -57,7 +76,8 @@ const getCurrentViewState = () => ({
   page: currentPage.value,
   worldview: selectedWorldview.value,
   latestSession: latestSession.value,
-  currentRoomId: currentRoomId.value
+  currentRoomId: currentRoomId.value,
+  latestEnding: latestEnding.value
 })
 
 const applyViewState = (state) => {
@@ -68,6 +88,7 @@ const applyViewState = (state) => {
   selectedWorldview.value = state?.worldview || null
   latestSession.value = state?.latestSession || null
   currentRoomId.value = state?.currentRoomId ?? null
+  latestEnding.value = state?.latestEnding || null
   isBackButtonHidden.value = false
 }
 
@@ -75,7 +96,8 @@ const isSameViewState = (state) =>
   state.page === currentPage.value &&
   state.worldview === selectedWorldview.value &&
   state.latestSession === latestSession.value &&
-  state.currentRoomId === currentRoomId.value
+  state.currentRoomId === currentRoomId.value &&
+  state.latestEnding === latestEnding.value
 
 const pushCurrentViewState = (nextState) => {
   if (isSameViewState(nextState)) return
@@ -88,7 +110,8 @@ const handleNavigate = (page, worldview = null) => {
     page: nextPage,
     worldview,
     latestSession: latestSession.value,
-    currentRoomId: nextPage === PAGE_ROOM ? currentRoomId.value : null
+    currentRoomId: nextPage === PAGE_ROOM ? currentRoomId.value : null,
+    latestEnding: nextPage === PAGE_ENDING ? latestEnding.value : null
   }
 
   pushCurrentViewState(nextState)
@@ -101,17 +124,26 @@ const handleEnterRoom = (payload) => {
     page: PAGE_ROOM,
     worldview: selectedWorldview.value,
     latestSession: latestSession.value,
-    currentRoomId: roomId != null ? Number(roomId) : null
+    currentRoomId: roomId != null ? Number(roomId) : null,
+    latestEnding: null
   }
 
   pushCurrentViewState(nextState)
   applyViewState(nextState)
 }
 
-const handleEnterApp = (session = {}) => {
+const handleEnterApp = async (session = {}) => {
   currentUser.value = session.user || getStoredUser()
   isAuthenticated.value = true
   isBackButtonHidden.value = false
+
+  if (!getStoredToken()) return
+
+  try {
+    currentUser.value = await authApi.me()
+  } catch {
+    currentUser.value = session.user || getStoredUser()
+  }
 }
 
 const clearRoleDrafts = () => {
@@ -124,17 +156,35 @@ const clearRoleDrafts = () => {
   })
 }
 
-const handleLogout = () => {
+const handleLogout = async () => {
   clearRoleDrafts()
-  clearAuth()
+  try {
+    await authApi.logout()
+  } catch {
+    clearAuth()
+  }
   currentUser.value = null
   selectedWorldview.value = null
   latestSession.value = null
   currentRoomId.value = null
+  latestEnding.value = null
   pageHistory.value = []
   isBackButtonHidden.value = false
   currentPage.value = PAGE_HOME
   isAuthenticated.value = false
+}
+
+const openSettings = () => {
+  isSettingsOpen.value = true
+}
+
+const closeSettings = () => {
+  isSettingsOpen.value = false
+}
+
+const handleSettingsLogout = () => {
+  closeSettings()
+  handleLogout()
 }
 
 const handleSessionCreated = (payload) => {
@@ -144,7 +194,8 @@ const handleSessionCreated = (payload) => {
     page: PAGE_ROOM,
     worldview: selectedWorldview.value,
     latestSession: payload,
-    currentRoomId: roomId != null ? Number(roomId) : null
+    currentRoomId: roomId != null ? Number(roomId) : null,
+    latestEnding: null
   }
 
   pushCurrentViewState(nextState)
@@ -156,10 +207,24 @@ const handleExitRoom = () => {
     page: PAGE_HOME,
     worldview: null,
     latestSession: null,
-    currentRoomId: null
+    currentRoomId: null,
+    latestEnding: null
   }
 
   pageHistory.value = []
+  applyViewState(nextState)
+}
+
+const handleGameEnded = (payload = {}) => {
+  const nextState = {
+    page: PAGE_ENDING,
+    worldview: selectedWorldview.value,
+    latestSession: latestSession.value,
+    currentRoomId: payload?.room?.id || currentRoomId.value || null,
+    latestEnding: payload
+  }
+
+  pushCurrentViewState(nextState)
   applyViewState(nextState)
 }
 
@@ -189,7 +254,15 @@ const handleBackButtonHidden = (hidden) => {
   isBackButtonHidden.value = Boolean(hidden)
 }
 
+let stopAudioSceneWatch = null
+
 onMounted(async () => {
+  initStoryAudio()
+  setMusicScene(musicScene.value)
+  stopAudioSceneWatch = watch(musicScene, (scene) => {
+    setMusicScene(scene)
+  })
+
   if (!getStoredToken()) {
     isBootstrapping.value = false
     return
@@ -199,10 +272,15 @@ onMounted(async () => {
     currentUser.value = await authApi.me()
     isAuthenticated.value = true
   } catch {
-    handleLogout()
+    await handleLogout()
   } finally {
     isBootstrapping.value = false
   }
+})
+
+onBeforeUnmount(() => {
+  stopAudioSceneWatch?.()
+  destroyStoryAudio()
 })
 </script>
 
@@ -221,7 +299,12 @@ onMounted(async () => {
       <span class="global-back-button__icon" aria-hidden="true"></span>
     </button>
 
-    <LoginRegister v-if="!isAuthenticated" @enter="handleEnterApp" />
+    <LoginRegister v-if="!isAuthenticated" @enter="handleEnterApp" @open-settings="openSettings" />
+    <AdminPage
+      v-else-if="isAdminUser"
+      :current-user="currentUser"
+      @logout="handleLogout"
+    />
     <component
       :is="activeComponent"
       v-else
@@ -229,13 +312,21 @@ onMounted(async () => {
       :worldview="selectedWorldview"
       :current-user="currentUser"
       :latest-session="latestSession"
+      :ending-payload="latestEnding"
       :initial-room-id="currentRoomId"
       @navigate="handleNavigate"
       @enter-room="handleEnterRoom"
       @session-created="handleSessionCreated"
       @exit-room="handleExitRoom"
+      @game-ended="handleGameEnded"
       @back-button-hidden="handleBackButtonHidden"
+      @open-settings="openSettings"
       @logout="handleLogout"
+    />
+    <SettingsModal
+      :open="isSettingsOpen"
+      @close="closeSettings"
+      @logout="handleSettingsLogout"
     />
   </template>
 </template>

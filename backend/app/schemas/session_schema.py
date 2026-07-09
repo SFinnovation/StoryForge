@@ -67,6 +67,7 @@ class StoryDTO(BaseModel):
     new_clues: list[dict] = Field(default_factory=list)
     task_updates: list[dict] = Field(default_factory=list)
     next_options: list[str] = Field(default_factory=list)
+    ending: dict | None = None
 
 
 class SessionMetaDTO(BaseModel):

@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StoryForge Agent DB Visualization</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1f2933;
+      --muted: #697386;
+      --line: #d8dee8;
+      --ok: #12805c;
+      --warn: #ad5700;
+      --bad: #b42318;
+      --blue: #2458b3;
+      --ink: #111827;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    header {
+      padding: 28px 32px 20px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 24px; letter-spacing: 0; }
+    h2 { font-size: 17px; margin-bottom: 14px; }
+    h3 { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+    main { padding: 24px 32px 40px; max-width: 1500px; margin: 0 auto; }
+    .sub { color: var(--muted); margin-top: 8px; }
+    .grid { display: grid; gap: 16px; }
+    .stats { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin: 18px 0 0; }
+    .stat, .panel, .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .stat { padding: 12px 14px; min-height: 74px; }
+    .stat strong { display: block; font-size: 24px; color: var(--ink); }
+    .stat span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .panel { padding: 18px; margin-bottom: 16px; overflow: hidden; }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+    .card { padding: 14px; min-height: 132px; }
+    .card-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .foot { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: minmax(170px, 1fr) 32px minmax(170px, 1fr) 32px minmax(170px, 1fr) 32px minmax(170px, 1fr);
+      align-items: stretch;
+      gap: 8px;
+    }
+    .node {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+      min-height: 126px;
+    }
+    .node strong { display: block; font-size: 15px; margin-bottom: 8px; }
+    .node code { font-size: 12px; color: var(--blue); }
+    .arrow { align-self: center; color: var(--muted); text-align: center; font-size: 24px; }
+    .alert {
+      padding: 12px 14px;
+      border: 1px solid #ffd6a8;
+      background: #fff8ef;
+      color: #7a3f00;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+    th { background: #f1f4f8; color: #334155; font-weight: 700; position: sticky; top: 0; }
+    tr:last-child td { border-bottom: 0; }
+    details summary { cursor: pointer; color: var(--blue); max-width: 420px; }
+    details pre { margin-top: 8px; background: #f6f8fb; padding: 10px; border-radius: 6px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f7f9fc;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge.ok { color: var(--ok); background: #ecfdf5; border-color: #a7f3d0; }
+    .badge.warn { color: var(--warn); background: #fff7ed; border-color: #fed7aa; }
+    .badge.bad { color: var(--bad); background: #fef3f2; border-color: #fecaca; }
+    .empty { color: var(--muted); padding: 18px; border: 1px dashed var(--line); border-radius: 8px; background: #fbfcfe; }
+    @media (max-width: 920px) {
+      header, main { padding-left: 18px; padding-right: 18px; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>StoryForge Agent DB Visualization</h1>
+    <p class="sub">DB: C:\Users\21539\Desktop\StoryForge\storyforge.db · Generated: 2026-07-09T06:52:58</p>
+    <div class="grid stats">
+        <article class="stat">
+          <strong>3</strong>
+          <span>worlds</span>
+        </article>
+        
+        <article class="stat">
+          <strong>1</strong>
+          <span>adventure_modules</span>
+        </article>
+        
+        <article class="stat">
+          <strong>0</strong>
+          <span>world_modules</span>
+        </article>
+        
+        <article class="stat">
+          <strong>1</strong>
+          <span>rulebook_packs</span>
+        </article>
+        
+        <article class="stat">
+          <strong>6</strong>
+          <span>rooms</span>
+        </article>
+        
+        <article class="stat">
+          <strong>6</strong>
+          <span>game_sessions</span>
+        </article>
+        
+        <article class="stat">
+          <strong>30</strong>
+          <span>messages</span>
+        </article>
+        
+        <article class="stat">
+          <strong>43</strong>
+          <span>room_messages</span>
+        </article>
+        
+        <article class="stat">
+          <strong>5</strong>
+          <span>facts</span>
+        </article>
+        
+        <article class="stat">
+          <strong>0</strong>
+          <span>npc_profiles</span>
+        </article>
+        
+        <article class="stat">
+          <strong>3</strong>
+          <span>clues</span>
+        </article>
+        
+        <article class="stat">
+          <strong>5</strong>
+          <span>tasks</span>
+        </article>
+        
+        <article class="stat">
+          <strong>9</strong>
+          <span>ai_reviews</span>
+        </article>
+        </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Source Chain</h2>
+      <div class="flow">
+        <div class="node">
+          <strong>Room</strong>
+          <code>id=6 / QN4XTV</code>
+          <p>追捕克伦可 Krenko’s Way团</p>
+          <p><span class="badge ok">playing</span></p>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>World</strong>
+          <code>world_id=2</code>
+          <p>龙与地下城 DND</p>
+          <p>《追捕克伦可 / Krenko&#x27;s Way》是发生在拉尼卡第十区的 D&amp;D 5e 1 级短冒险。鬼怪暴民头目克伦可在转狱途中逃脱，十会盟官员纳休斯·文雇佣冒险者追捕他并活着带回。
+
+冒险核心流程是：从锯齿监狱接受委托，追查转狱路线、警卫、线人和城市流言，避免或应对骚帮兄弟会的介入，最终找到运河附近仓库中的克伦可。
+
+冒险从锯齿监狱开始，队伍应十会盟的官员 纳休斯·文 Nassius Ven 召唤而来。他解释了克仑可在转狱期间逃脱这一情况，并敦促角色们尽快并谨慎将其逮捕归案接受审判。
+
+角色们可追溯转狱的路线，询问相关警卫获取更进一步情报，还可以利用自己在城里的联络人来了解更多有关克仑可的信息。如果进行调查时稍有不慎，他们就会引起意图杀死克仑可的敌对黑帮&quot;骚帮兄弟会&quot;的注意。随后该帮派的成员将在全城追踪玩家的队伍，并试图找到该鬼怪暴民头目的所在地。
+
+最终，冒险者们会找到了克仑可的藏身处:某条运河附近的一个仓库。最终的会面有鬼怪暴民头目和他的随从，甚至可能出现插手的骚帮成员。而这仅仅是你们将克仑可带回给纳休前的一个事件，之后还会有更多麻烦接踵而来。</p>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>Adventure Module</strong>
+          <code>adventure_module_id=1</code>
+          <p>Module data exists</p>
+          <p><span class="badge ok">linked</span></p>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>OpeningAgent Input</strong>
+          <code>session_id=6</code>
+          <p>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点。叙事风格应是城市追捕、帮派压力、拉尼卡公会政治、低等级冒险和清晰调查线索。</p>
+        </div>
+      </div>
+      <div class="alert">The selected room is linked to an adventure module.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Agent Snapshot</h2>
+      <div class="grid cards">
+        
+    <article class="card">
+      <div class="card-title">First AI Room Message</div>
+      <pre>你站在破晓前的阴影中，指尖仍残留着昨夜行动的触感。酒馆“醉龙酒杯”的招牌在风中吱呀作响，门缝里透出昏黄的烛光。你听说有个神秘雇主正在寻找像你这样的“能人”——报酬丰厚，但任务细节只字未提。城内巡逻队的脚步声在石板路上渐近，你决定推门而入，看看命运为你准备了什么。</pre>
+      
+    </article>
+    
+        
+    <article class="card">
+      <div class="card-title">Character</div>
+      <pre>{
+  &quot;character_id&quot;: 27,
+  &quot;character_name&quot;: &quot;1&quot;,
+  &quot;class_id&quot;: &quot;rogue&quot;,
+  &quot;background_id&quot;: &quot;criminal&quot;,
+  &quot;motivation&quot;: &quot;踏上新的冒险&quot;
+}</pre>
+      
+    </article>
+    
+        
+    <article class="card">
+      <div class="card-title">World Opening Prompt</div>
+      <pre>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点。叙事风格应是城市追捕、帮派压力、拉尼卡公会政治、低等级冒险和清晰调查线索。</pre>
+      
+    </article>
+    
+      </div>
+    </section>
+
+    
+    <section class="panel">
+      <h2>Room -&gt; World -&gt; Session</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Room ID</th><th>Title</th><th>Code</th><th>Room Status</th><th>Max</th><th>World ID</th><th>World</th><th>Module ID</th><th>Current Session</th><th>Character</th><th>Opening Prompt</th></tr></thead>
+          <tbody><tr><td>1</td><td>追捕克伦可 Krenko’s Way团</td><td>YXXRDY</td><td><span class="badge warn">waiting</span></td><td>4</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td></td><td></td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr><tr><td>2</td><td>Codex 1????</td><td>MVV4VT</td><td><span class="badge bad">archived</span></td><td>1</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td></td><td></td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr><tr><td>3</td><td>追捕克伦可 Krenko’s Way团</td><td>SY39GK</td><td><span class="badge muted">finished</span></td><td>1</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td>5</td><td>xiayutao</td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr><tr><td>4</td><td>Codex fallback start test</td><td>PPVVYL</td><td><span class="badge bad">archived</span></td><td>1</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td></td><td></td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr><tr><td>5</td><td>Codex real start test</td><td>BZSR0U</td><td><span class="badge bad">archived</span></td><td>1</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td></td><td></td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr><tr><td>6</td><td>追捕克伦可 Krenko’s Way团</td><td>QN4XTV</td><td><span class="badge ok">playing</span></td><td>1</td><td>2</td><td>龙与地下城 DND</td><td>1</td><td>6</td><td>1</td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+    <section class="panel">
+      <h2>adventure_modules</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Title</th><th>Source</th><th>Status</th><th>Opening Prompt</th><th>Created</th></tr></thead>
+          <tbody><tr><td>1</td><td>追捕克伦可 / 追捕克仑可 / Krenko&#x27;s Way</td><td>追捕克仑可_Krenkos_Way_清理整理版.md</td><td><span class="badge ok">active</span></td><td>你正在主持 D&amp;D 5e 冒险《追捕克伦可 / Krenko&#x27;s Way》。必须使用拉尼卡第十区作为舞台，开局地点是锯齿监狱或十会盟安排的会面处，委托人是纳休斯·文 Nassius Ven。核心事件：鬼怪暴民头目克伦可在转狱途中逃脱，玩家需要调查线索，避开或处理骚帮兄弟会，最终找到克伦可并尽量活捉交还。不要生成剑湾、渡鸦谷、龙骨山脉或其他通用 D&amp;D 地点...</td><td>2026-07-08 22:35:59.047707</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+        <section class="panel">
+          <h2>world_modules</h2>
+          <div class="empty">Empty: no world-specific module rows.</div>
+        </section>
+        
+    <section class="panel">
+      <h2>rulebook_packs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Title</th><th>Source</th><th>Status</th><th>Rules Summary</th><th>Created</th></tr></thead>
+          <tbody><tr><td>1</td><td>5e D&amp;D 玩家手册 PHB 中译规则摘要</td><td>5eDnD_玩家手册PHB_中译v1.6版_清理整理版.md</td><td><span class="badge ok">active</span></td><td>轻量 D&amp;D 5e 裁定摘要：常规检定使用 d20 + 属性调整值 + 熟练加值，对比 DC。1 级角色熟练加值为 +2。优势/劣势以两个 d20 取高/取低表现。行动失败时应推进局势并给出代价，成功时给出清晰收益。战斗相关行动可参考 AC、生命值、伤害、豁免、先攻和位置关系。除非玩家明确请求，不要让规则摘要覆盖当前冒险模组的地点、NPC 和任务。 已在源...</td><td>2026-07-08 22:35:59.038575</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+    <section class="panel">
+      <h2>messages: session narrative log</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Session</th><th>Sender</th><th>Name</th><th>Type</th><th>Content</th><th>Tokens</th><th>Latency</th><th>Created</th></tr></thead>
+          <tbody><tr><td>23</td><td>6</td><td><span class="badge muted">ai</span></td><td>AI</td><td><span class="badge muted">narration</span></td><td>你站在破晓前的阴影中，指尖仍残留着昨夜行动的触感。酒馆“醉龙酒杯”的招牌在风中吱呀作响，门缝里透出昏黄的烛光。你听说有个神秘雇主正在寻找像你这样的“能人”——报酬丰厚，但任务细节只字未提。城内巡逻队的脚步声在石板路上渐近，你决定推门而入，看看命运为你准备了什么。</td><td>652</td><td>6538</td><td>2026-07-08 22:25:02.668759</td></tr><tr><td>24</td><td>6</td><td><span class="badge muted">player</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>进入酒馆</td><td></td><td></td><td>2026-07-08 22:26:09.762872</td></tr><tr><td>25</td><td>6</td><td><span class="badge muted">ai</span></td><td>AI</td><td><span class="badge muted">narration</span></td><td>你推开酒馆沉重的木门，门轴发出轻微的呻吟。室内烟雾缭绕，暖黄的烛光在墙壁上投下摇曳的影子。几个酒客抬起头看了你一眼，又低下头继续他们的谈话。吧台后，一个独眼的酒保正用一块油腻的布擦拭着杯子。角落里，一个戴着兜帽的身影似乎正注视着你手中的动作。你听到附近桌上有人低语：“……那个藏在阴影里的人，据说知道所有秘密……”</td><td>2368</td><td>7711</td><td>2026-07-08 22:26:09.764575</td></tr><tr><td>26</td><td>6</td><td><span class="badge muted">player</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>我走到酒客前面，问他玩不玩一把德州</td><td></td><td></td><td>2026-07-08 22:27:18.137219</td></tr><tr><td>27</td><td>6</td><td><span class="badge muted">ai</span></td><td>AI</td><td><span class="badge muted">narration</span></td><td>你走到那位独坐的酒客面前，微微一笑，问道：“朋友，玩不玩一把德州？”他抬起头，露出一张布满风霜的脸，眼中闪过一丝兴趣。“哈，在龙与地下城的世界里玩德州？有意思。”他拍了拍身边的凳子，“坐下吧，不过我可不用金币——咱们赌点更有意思的东西：情报。你要是赢了，我告诉你一个关于‘阴影集会’的秘密；输了，你帮我跑趟腿。如何？”</td><td>2406</td><td>6768</td><td>2026-07-08 22:27:18.139228</td></tr><tr><td>28</td><td>6</td><td><span class="badge muted">player</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>我拒绝，我准备打他一顿，打到他说出情报</td><td></td><td></td><td>2026-07-08 22:28:23.064286</td></tr><tr><td>29</td><td>6</td><td><span class="badge muted">system</span></td><td>System</td><td><span class="badge muted">dice</span></td><td>d20(9) + 力量(+-1) + 熟练(+2) = 10 &lt; DC 15，失败</td><td></td><td></td><td>2026-07-08 22:28:23.066796</td></tr><tr><td>30</td><td>6</td><td><span class="badge muted">ai</span></td><td>AI</td><td><span class="badge muted">narration</span></td><td>你猛地站起身，拳头紧握，准备给这个酒客一点颜色看看。然而，当你挥拳砸向他的脸时，他敏捷地侧身一闪，你的拳头擦过他的耳朵，砸在了旁边的木桌上，发出沉闷的响声。酒馆里的目光瞬间聚焦在你身上，几个醉醺醺的顾客投来不善的眼神。那个酒客咧嘴一笑，反手抓住你的手腕，猛地一扭，将你的手臂压在桌上，另一只手摸向腰间的匕首。‘嘿，小子，在这儿动手可不是明智之举。巡逻队就在街...</td><td>5400</td><td>13181</td><td>2026-07-08 22:28:23.068231</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+    <section class="panel">
+      <h2>room_messages: realtime room event stream</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Seq</th><th>ID</th><th>Session</th><th>Role</th><th>Name</th><th>Type</th><th>Content</th><th>Payload JSON</th><th>Created</th></tr></thead>
+          <tbody><tr><td>1</td><td>36</td><td>6</td><td><span class="badge muted">ai_dm</span></td><td>AI DM</td><td><span class="badge muted">narration</span></td><td>你站在破晓前的阴影中，指尖仍残留着昨夜行动的触感。酒馆“醉龙酒杯”的招牌在风中吱呀作响，门缝里透出昏黄的烛光。你听说有个神秘雇主正在寻找像你这样的“能人”——报酬丰厚，但任务细节只字未提。城内巡逻队的脚步声在石板路上渐近，你决定推门而入，看看命运为你准备了什么。</td><td><details><summary>{&#x27;scene_title&#x27;: &#x27;阴影中的低语&#x27;, &#x27;main_task&#x27;: &#x27;进入“醉龙酒杯”酒馆，找到神秘雇主，接受委托并开始冒险。&#x27;, &#x27;initial...</summary><pre>{
+  &quot;scene_title&quot;: &quot;阴影中的低语&quot;,
+  &quot;main_task&quot;: &quot;进入“醉龙酒杯”酒馆，找到神秘雇主，接受委托并开始冒险。&quot;,
+  &quot;initial_clues&quot;: [
+    {
+      &quot;title&quot;: &quot;酒馆传言&quot;,
+      &quot;content&quot;: &quot;酒馆里的常客低声议论，说有个戴兜帽的陌生人每晚在角落的阴影中等待，只与那些看起来“有故事”的人交谈。&quot;,
+      &quot;importance&quot;: &quot;normal&quot;
+    },
+    {
+      &quot;title&quot;: &quot;悬赏告示&quot;,
+      &quot;content&quot;: &quot;门外的告示板上贴着一张褪色的羊皮纸，上面画着一枚银质徽章，下方写着：“寻求勇者，报酬从优，详情面谈。”&quot;,
+      &quot;importance&quot;: &quot;normal&quot;
+    }
+  ],
+  &quot;npcs&quot;: []
+}</pre></details></td><td>2026-07-08 22:25:02.706069</td></tr><tr><td>2</td><td>37</td><td>6</td><td><span class="badge muted">user</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>进入酒馆</td><td><details><summary>{}</summary><pre>{}</pre></details></td><td>2026-07-08 22:26:09.789204</td></tr><tr><td>3</td><td>38</td><td>6</td><td><span class="badge muted">ai_dm</span></td><td>AI DM</td><td><span class="badge muted">narration</span></td><td>你推开酒馆沉重的木门，门轴发出轻微的呻吟。室内烟雾缭绕，暖黄的烛光在墙壁上投下摇曳的影子。几个酒客抬起头看了你一眼，又低下头继续他们的谈话。吧台后，一个独眼的酒保正用一块油腻的布擦拭着杯子。角落里，一个戴着兜帽的身影似乎正注视着你手中的动作。你听到附近桌上有人低语：“……那个藏在阴影里的人，据说知道所有秘密……”</td><td><details><summary>{&#x27;visible_result&#x27;: &#x27;你顺利进入酒馆，没有引起注意。&#x27;, &#x27;new_clues&#x27;: [], &#x27;task_updates&#x27;: [], &#x27;nex...</summary><pre>{
+  &quot;visible_result&quot;: &quot;你顺利进入酒馆，没有引起注意。&quot;,
+  &quot;new_clues&quot;: [],
+  &quot;task_updates&quot;: [],
+  &quot;next_options&quot;: [
+    &quot;走向吧台，向酒保点一杯酒并打听消息&quot;,
+    &quot;直接走向角落那个戴兜帽的身影&quot;,
+    &quot;找一个空位坐下，暗中观察周围的动静&quot;
+  ]
+}</pre></details></td><td>2026-07-08 22:26:09.791250</td></tr><tr><td>4</td><td>39</td><td>6</td><td><span class="badge muted">user</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>我走到酒客前面，问他玩不玩一把德州</td><td><details><summary>{}</summary><pre>{}</pre></details></td><td>2026-07-08 22:27:18.152342</td></tr><tr><td>5</td><td>40</td><td>6</td><td><span class="badge muted">ai_dm</span></td><td>AI DM</td><td><span class="badge muted">narration</span></td><td>你走到那位独坐的酒客面前，微微一笑，问道：“朋友，玩不玩一把德州？”他抬起头，露出一张布满风霜的脸，眼中闪过一丝兴趣。“哈，在龙与地下城的世界里玩德州？有意思。”他拍了拍身边的凳子，“坐下吧，不过我可不用金币——咱们赌点更有意思的东西：情报。你要是赢了，我告诉你一个关于‘阴影集会’的秘密；输了，你帮我跑趟腿。如何？”</td><td><details><summary>{&#x27;visible_result&#x27;: &#x27;酒客接受了你的游戏提议，但赌注是情报。&#x27;, &#x27;new_clues&#x27;: [], &#x27;task_updates&#x27;: [], ...</summary><pre>{
+  &quot;visible_result&quot;: &quot;酒客接受了你的游戏提议，但赌注是情报。&quot;,
+  &quot;new_clues&quot;: [],
+  &quot;task_updates&quot;: [],
+  &quot;next_options&quot;: [
+    &quot;接受赌局，用你的牌技赢取情报&quot;,
+    &quot;拒绝赌局，直接问他关于神秘雇主的事&quot;,
+    &quot;借口离开，先观察酒馆里的其他人&quot;
+  ]
+}</pre></details></td><td>2026-07-08 22:27:18.154867</td></tr><tr><td>6</td><td>41</td><td>6</td><td><span class="badge muted">user</span></td><td>xiayutao</td><td><span class="badge muted">action</span></td><td>我拒绝，我准备打他一顿，打到他说出情报</td><td><details><summary>{}</summary><pre>{}</pre></details></td><td>2026-07-08 22:28:23.083862</td></tr><tr><td>7</td><td>42</td><td>6</td><td><span class="badge muted">system</span></td><td></td><td><span class="badge muted">dice</span></td><td>d20(9) + 力量(+-1) + 熟练(+2) = 10 &lt; DC 15，失败</td><td><details><summary>{&#x27;id&#x27;: 7, &#x27;check_type&#x27;: &#x27;运动&#x27;, &#x27;skill_key&#x27;: &#x27;ath&#x27;, &#x27;attribute_used&#x27;: &#x27;strength&#x27;,...</summary><pre>{
+  &quot;id&quot;: 7,
+  &quot;check_type&quot;: &quot;运动&quot;,
+  &quot;skill_key&quot;: &quot;ath&quot;,
+  &quot;attribute_used&quot;: &quot;strength&quot;,
+  &quot;dc&quot;: 15,
+  &quot;dice_roll&quot;: 9,
+  &quot;ability_modifier&quot;: -1,
+  &quot;skill_bonus&quot;: 2,
+  &quot;final_value&quot;: 10,
+  &quot;is_success&quot;: false,
+  &quot;result_text&quot;: &quot;d20(9) + 力量(+-1) + 熟练(+2) = 10 &lt; DC 15，失败&quot;
+}</pre></details></td><td>2026-07-08 22:28:23.087063</td></tr><tr><td>8</td><td>43</td><td>6</td><td><span class="badge muted">ai_dm</span></td><td>AI DM</td><td><span class="badge muted">narration</span></td><td>你猛地站起身，拳头紧握，准备给这个酒客一点颜色看看。然而，当你挥拳砸向他的脸时，他敏捷地侧身一闪，你的拳头擦过他的耳朵，砸在了旁边的木桌上，发出沉闷的响声。酒馆里的目光瞬间聚焦在你身上，几个醉醺醺的顾客投来不善的眼神。那个酒客咧嘴一笑，反手抓住你的手腕，猛地一扭，将你的手臂压在桌上，另一只手摸向腰间的匕首。‘嘿，小子，在这儿动手可不是明智之举。巡逻队就在街...</td><td><details><summary>{&#x27;visible_result&#x27;: &#x27;你试图攻击酒客，反被制服，手腕受伤，且引来酒馆老板的警告。&#x27;, &#x27;new_clues&#x27;: [], &#x27;task_upda...</summary><pre>{
+  &quot;visible_result&quot;: &quot;你试图攻击酒客，反被制服，手腕受伤，且引来酒馆老板的警告。&quot;,
+  &quot;new_clues&quot;: [],
+  &quot;task_updates&quot;: [],
+  &quot;next_options&quot;: [
+    &quot;忍气吞声，坐下来和酒客谈谈，尝试用其他方式获取情报&quot;,
+    &quot;趁酒客不备，用另一只手偷袭他，夺回主动权&quot;,
+    &quot;放弃这个情报源，离开酒馆，另寻他法&quot;
+  ]
+}</pre></details></td><td>2026-07-08 22:28:23.088050</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+    <section class="panel">
+      <h2>tasks</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Session</th><th>Title</th><th>Description</th><th>Status</th><th>Created</th><th>Updated</th></tr></thead>
+          <tbody><tr><td>5</td><td>6</td><td>进入“醉龙酒杯”酒馆，找到神秘雇主，接受委托并开始冒险。</td><td>进入“醉龙酒杯”酒馆，找到神秘雇主，接受委托并开始冒险。</td><td><span class="badge muted">doing</span></td><td>2026-07-08 22:25:02.668759</td><td>2026-07-08 22:25:02.668759</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+    <section class="panel">
+      <h2>facts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Session</th><th>Type</th><th>Content</th><th>Visibility</th><th>Importance</th><th>Status</th><th>Created</th></tr></thead>
+          <tbody><tr><td>4</td><td>6</td><td>session_fact</td><td>酒馆内有一个戴兜帽的神秘人物</td><td><details><summary>{}</summary><pre>{}</pre></details></td><td>normal</td><td><span class="badge ok">active</span></td><td>2026-07-08 22:26:09.769617</td></tr><tr><td>5</td><td>6</td><td>session_fact</td><td>有酒客提到一个藏在阴影里的人知晓秘密</td><td><details><summary>{}</summary><pre>{}</pre></details></td><td>normal</td><td><span class="badge ok">active</span></td><td>2026-07-08 22:26:09.771652</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+    
+        <section class="panel">
+          <h2>npc_profiles</h2>
+          <div class="empty">No rows</div>
+        </section>
+        
+    
+        <section class="panel">
+          <h2>clues</h2>
+          <div class="empty">No rows</div>
+        </section>
+        
+    
+    <section class="panel">
+      <h2>ai_reviews</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Session</th><th>Message</th><th>Approved</th><th>Score</th><th>Scores</th><th>Fatal Errors</th><th>Revisions</th><th>Revision Count</th><th>Fallback</th><th>Tokens</th><th>Latency</th><th>Created</th></tr></thead>
+          <tbody><tr><td>7</td><td>6</td><td>25</td><td>1</td><td>92</td><td><details><summary>{&#x27;rule_consistency&#x27;: 100, &#x27;world_consistency&#x27;: 90, &#x27;context_continuity&#x27;: 90, &#x27;c...</summary><pre>{
+  &quot;rule_consistency&quot;: 100,
+  &quot;world_consistency&quot;: 90,
+  &quot;context_continuity&quot;: 90,
+  &quot;character_alignment&quot;: 95,
+  &quot;npc_knowledge_boundary&quot;: 100,
+  &quot;clue_progression&quot;: 80
+}</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td>0</td><td>0</td><td>2368</td><td>7711</td><td>2026-07-08 22:26:09.772742</td></tr><tr><td>8</td><td>6</td><td>27</td><td>1</td><td>95</td><td><details><summary>{&#x27;rule_consistency&#x27;: 100, &#x27;world_consistency&#x27;: 95, &#x27;context_continuity&#x27;: 90, &#x27;c...</summary><pre>{
+  &quot;rule_consistency&quot;: 100,
+  &quot;world_consistency&quot;: 95,
+  &quot;context_continuity&quot;: 90,
+  &quot;character_alignment&quot;: 95,
+  &quot;npc_knowledge_boundary&quot;: 100,
+  &quot;clue_progression&quot;: 90
+}</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td>0</td><td>0</td><td>2406</td><td>6768</td><td>2026-07-08 22:27:18.142275</td></tr><tr><td>9</td><td>6</td><td>30</td><td>1</td><td>92</td><td><details><summary>{&#x27;rule_consistency&#x27;: 95, &#x27;world_consistency&#x27;: 90, &#x27;context_continuity&#x27;: 90, &#x27;ch...</summary><pre>{
+  &quot;rule_consistency&quot;: 95,
+  &quot;world_consistency&quot;: 90,
+  &quot;context_continuity&quot;: 90,
+  &quot;character_alignment&quot;: 85,
+  &quot;npc_knowledge_boundary&quot;: 100,
+  &quot;clue_progression&quot;: 90
+}</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td><details><summary>[]</summary><pre>[]</pre></details></td><td>1</td><td>0</td><td>5400</td><td>13181</td><td>2026-07-08 22:28:23.071778</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    
+  </main>
+</body>
+</html>

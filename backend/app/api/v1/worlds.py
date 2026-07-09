@@ -18,6 +18,7 @@ def list_worlds(db: Session = Depends(get_db)):
                 "name": w.name,
                 "type": w.type,
                 "description": w.description,
+                "rule_style": w.rule_style,
                 "difficulty": w.difficulty,
                 "cover_url": w.cover_url,
             }
@@ -40,6 +41,7 @@ def get_world(world_id: int, db: Session = Depends(get_db)):
             "type": world.type,
             "description": world.description,
             "opening_prompt": world.opening_prompt,
+            "rule_style": world.rule_style,
             "difficulty": world.difficulty,
         }
     )

@@ -42,7 +42,6 @@ def join_room(db: Session, user_id: int, payload: RoomJoinRequest) -> tuple[int,
     if members.count(room.id) >= room.max_players:
         raise StoryForgeError("room is full", status_code=409)
 
-    _validate_character(db, user_id, payload.character_id)
     user = db.get(User, user_id)
     display_name = payload.display_name or (user.nickname or user.username if user else None)
 
@@ -52,7 +51,7 @@ def join_room(db: Session, user_id: int, payload: RoomJoinRequest) -> tuple[int,
             user_id=user_id,
             role="player",
             display_name=display_name,
-            character_id=payload.character_id,
+            character_id=None,
         )
         RoomRepo(db).touch(room)
         db.commit()

@@ -26,6 +26,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
     role: Mapped[str] = mapped_column(String(10), default="user", nullable=False)
     status: Mapped[str] = mapped_column(String(10), default="active", nullable=False)
+    is_temporary: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

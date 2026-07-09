@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from backend.app.core.exceptions import StoryForgeError
@@ -17,7 +19,7 @@ from backend.app.repositories.room_repository import RoomActionRepo, RoomMessage
 from backend.app.services.action_service import run_action_pipeline
 from backend.app.services.chat_service import message_dto, persist_message
 from backend.app.services.realtime_service import make_event
-from backend.app.services.room_service import get_room, require_member
+from backend.app.services.room_service import detail_dto, get_room, require_member
 from backend.app.services.websocket_manager import connection_manager, get_room_lock
 
 
@@ -127,6 +129,12 @@ async def handle_action(
                     "next_options": data.story.next_options,
                 },
             )
+            ending = data.story.ending or {}
+            should_end = bool(ending.get("should_end"))
+            if should_end:
+                session.status = "finished"
+                session.ended_at = datetime.utcnow()
+                room.status = "finished"
             RoomActionRepo(db).mark(action_record, "done", result_message_id=m_narration.id)
             db.commit()
         except Exception:
@@ -175,4 +183,15 @@ async def handle_action(
                 },
             )
         )
+        if should_end:
+            events.append(
+                make_event(
+                    "game.ended",
+                    room_id,
+                    {
+                        **detail_dto(db, room).model_dump(),
+                        "ending": ending,
+                    },
+                )
+            )
         return {"duplicate": False, "action_data": data, "events": events}

@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from backend.app.schemas.character import CharacterResponse
+
 
 # ---------------- 请求体 ----------------
 
@@ -62,6 +64,7 @@ class RoomMemberDTO(BaseModel):
     user_id: int
     character_id: int | None = None
     character_name: str | None = None
+    character: CharacterResponse | None = None
     role: str
     display_name: str | None = None
     online_status: str = "offline"
@@ -80,6 +83,15 @@ class RoomDTO(BaseModel):
     status: str
     max_players: int
     created_at: datetime | str | None = None
+    member_count: int = 0
+    ready_count: int = 0
+    progress_percent: int = 0
+    team_sync_percent: int = 0
+    action_count: int = 0
+    clue_count: int = 0
+    key_clue_count: int = 0
+    task_done_count: int = 0
+    task_total_count: int = 0
 
 
 class RoomDetailDTO(BaseModel):

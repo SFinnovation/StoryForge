@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { charactersApi, roomsApi, sessionsApi, worldsApi } from './api/client'
 import JoinRoomModal from './JoinRoomModal.vue'
+import AppNavbar from './components/AppNavbar.vue'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
 import cubeIcon from '../图标/魔方.png'
@@ -21,12 +22,11 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['navigate', 'enter-room', 'session-created', 'logout', 'back-button-hidden'])
+const emit = defineEmits(['navigate', 'enter-room', 'session-created', 'logout', 'back-button-hidden', 'open-settings'])
 
 const showCreateModal = ref(false)
 const showJoinModal = ref(false)
 const roomCode = ref('')
-const activeNav = ref(props.currentPage)
 const worlds = ref([])
 const characters = ref([])
 const sessions = ref([])
@@ -41,13 +41,11 @@ watch([showCreateModal, showJoinModal], ([isCreateOpen, isJoinOpen]) => {
 }, { immediate: true })
 
 const createRoomForm = reactive({
-  roomName: '追捕克伦可团',
+  roomName: '',
   maxPlayers: 4,
   roomType: 'public',
   difficulty: 'normal'
 })
-
-const navItems = []
 
 const actionCards = [
   {
@@ -96,8 +94,9 @@ const fallbackQuickRooms = [
 const fallbackLastAdventure = {
   title: '追捕克伦可',
   chapter: '第 1 章 · 地下线索',
-  progress: 68,
-  teamSync: 61
+  progress: 0,
+  teamSync: 0,
+  groupName: '等待新的冒险'
 }
 
 const fallbackScriptTemplates = [
@@ -121,12 +120,36 @@ const statusLabel = (status) => {
 
 const worldName = (worldId) => worlds.value.find((w) => w.id === worldId)?.name || '未知世界'
 
+const clampPercent = (value) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.min(100, Math.round(numeric)))
+}
+
+const progressFromStats = (record = {}) => {
+  if (record.progress_percent != null) return clampPercent(record.progress_percent)
+  if (record.status === 'finished' || record.status === 'archived') return 100
+  const actionProgress = Math.min(85, Number(record.action_count || 0) * 10)
+  const clueProgress = Math.min(90, Number(record.clue_count || 0) * 7 + Number(record.key_clue_count || 0) * 11)
+  const taskTotal = Number(record.task_total_count || 0)
+  const taskProgress = taskTotal > 0 ? (Number(record.task_done_count || 0) / taskTotal) * 100 : 0
+  return clampPercent(Math.max(actionProgress, clueProgress, taskProgress))
+}
+
+const teamSyncPercent = (record = {}) => {
+  if (record.team_sync_percent != null) return clampPercent(record.team_sync_percent)
+  const memberCount = Number(record.member_count || 0)
+  const maxPlayers = Number(record.max_players || 0)
+  if (maxPlayers > 0) return clampPercent((memberCount / maxPlayers) * 100)
+  return 0
+}
+
 const quickRooms = computed(() => {
   if (rooms.value.length === 0) return fallbackQuickRooms
 
   return rooms.value.slice(0, 3).map((room) => ({
     name: room.title || `房间 #${room.id}`,
-    players: statusLabel(room.status),
+    players: room.max_players ? `${room.member_count || 0}/${room.max_players} 人` : statusLabel(room.status),
     owner: props.currentUser?.nickname || props.currentUser?.username || '当前用户',
     roomId: room.id
   }))
@@ -143,7 +166,7 @@ const joinableRooms = computed(() => {
     roomCode: room.room_code,
     name: room.title || `房间 #${room.id}`,
     worldview: worldName(room.world_id),
-    players: `${room.max_players} 上限`,
+    players: `${room.member_count || 0}/${room.max_players} 人`,
     status: statusLabel(room.status)
   }))
 })
@@ -154,8 +177,9 @@ const lastAdventure = computed(() => {
     return {
       title: playingRoom.title || `房间 #${playingRoom.id}`,
       chapter: `${statusLabel(playingRoom.status)} · 房间码 ${playingRoom.room_code}`,
-      progress: 68,
-      teamSync: 61,
+      progress: progressFromStats(playingRoom),
+      teamSync: teamSyncPercent(playingRoom),
+      groupName: `当前团：${playingRoom.title || '冒险小队'}`,
       roomId: playingRoom.id
     }
   }
@@ -166,8 +190,9 @@ const lastAdventure = computed(() => {
   return {
     title: session.title || `会话 #${session.id}`,
     chapter: session.current_scene || '等待继续',
-    progress: session.status === 'playing' ? 68 : 100,
-    teamSync: session.status === 'playing' ? 61 : 100,
+    progress: progressFromStats(session),
+    teamSync: teamSyncPercent(session),
+    groupName: session.adventure_module_title ? `当前团：${session.adventure_module_title}` : '单人冒险',
     sessionId: session.id
   }
 })
@@ -200,6 +225,35 @@ const refreshLobbyData = async () => {
 
 const selectedWorld = () => worlds.value[0] || null
 
+const buildRoomJoinWorldview = (detail) => {
+  const roomInfo = detail?.room
+  const world = worlds.value.find((item) => item.id === roomInfo?.world_id)
+  return {
+    id: world?.id || roomInfo?.world_id,
+    backendId: world?.id || roomInfo?.world_id,
+    source: 'room-join',
+    title: world?.name || roomInfo?.title || '房间角色',
+    name: world?.name || roomInfo?.title || '房间角色',
+    rule_style: world?.rule_style,
+    description: world?.description,
+    selectedModule: {
+      worldId: world?.id || roomInfo?.world_id,
+      name: roomInfo?.title || world?.name || '房间冒险'
+    },
+    roomJoin: {
+      roomId: roomInfo?.id,
+      roomCode: roomInfo?.room_code,
+      title: roomInfo?.title
+    }
+  }
+}
+
+const routeToRoomCharacterCreation = (detail) => {
+  showJoinModal.value = false
+  apiStatus.value = '请先为这个房间创建你的角色。'
+  emit('navigate', 'role', buildRoomJoinWorldview(detail))
+}
+
 const enterExistingPlayingSession = async () => {
   await refreshLobbyData()
   const playingSession = sessions.value.find((session) => session.status === 'playing') || sessions.value[0]
@@ -226,11 +280,16 @@ const handleCreateRoom = async () => {
     apiStatus.value = '暂时没有可用世界观。'
     return
   }
+  const roomName = createRoomForm.roomName.trim()
+  if (!roomName) {
+    apiStatus.value = '需要输入自定义房间名。'
+    return
+  }
 
   isSubmitting.value = true
   try {
     const detail = await roomsApi.create({
-      title: createRoomForm.roomName.trim(),
+      title: roomName,
       world_id: world.id,
       visibility: createRoomForm.roomType === 'public' ? 'public' : 'private',
       max_players: Number(createRoomForm.maxPlayers) || 4
@@ -268,9 +327,13 @@ const handleJoinRoom = async ({ code = '', room = null } = {}) => {
   try {
     if (room?.roomId) {
       const detail = await roomsApi.join({
-        room_code: room.roomCode || String(room.roomId),
-        character_id: charId
+        room_code: room.roomCode || String(room.roomId)
       })
+      if (!charId) {
+        routeToRoomCharacterCreation(detail)
+        return
+      }
+      await roomsApi.setCharacter(detail.room.id, charId)
       closeJoinModal()
       emit('enter-room', { roomId: detail.room.id })
       return
@@ -279,9 +342,13 @@ const handleJoinRoom = async ({ code = '', room = null } = {}) => {
     const trimmedCode = code.trim().toUpperCase()
     if (trimmedCode) {
       const detail = await roomsApi.join({
-        room_code: trimmedCode,
-        character_id: charId
+        room_code: trimmedCode
       })
+      if (!charId) {
+        routeToRoomCharacterCreation(detail)
+        return
+      }
+      await roomsApi.setCharacter(detail.room.id, charId)
       closeJoinModal()
       emit('enter-room', { roomId: detail.room.id })
       return
@@ -339,11 +406,6 @@ const handleAction = (action) => {
   handleHistory()
 }
 
-const handleNavigate = (page) => {
-  activeNav.value = page
-  emit('navigate', page)
-}
-
 onMounted(refreshLobbyData)
 </script>
 
@@ -356,50 +418,11 @@ onMounted(refreshLobbyData)
       <div class="scene-grid"></div>
     </div>
 
-    <nav class="navbar">
-      <div class="nav-logo">
-        <img class="logo-icon" :src="productIcon" alt="StoryForge 产品图标" />
-        <div class="logo-text">
-          <span class="logo-en">StoryForge</span>
-          <span class="logo-cn">灵境档案</span>
-        </div>
-      </div>
-
-      <div class="nav-menu">
-        <button
-          v-for="item in navItems"
-          :key="item"
-          class="nav-item"
-          :class="{ active: activeNav === item }"
-          @click="handleNavigate(item)"
-        >
-          {{ item }}
-        </button>
-      </div>
-
-      <div class="nav-user">
-        <div class="user-chip">
-          <div class="user-avatar">夜</div>
-          <div class="user-info">
-            <span class="user-name">{{ props.currentUser?.nickname || props.currentUser?.username || '游客' }}</span>
-            <span class="user-level">Lv.12</span>
-          </div>
-        </div>
-        <button class="nav-icon" aria-label="消息">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M4 6h16v12H4z" />
-            <path d="m4 7 8 6 8-6" />
-          </svg>
-        </button>
-        <button class="nav-icon" aria-label="退出登录" @click="emit('logout')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M10 17l5-5-5-5" />
-            <path d="M15 12H3" />
-            <path d="M21 3v18h-8" />
-          </svg>
-        </button>
-      </div>
-    </nav>
+    <AppNavbar
+      :current-user="props.currentUser"
+      @open-settings="emit('open-settings')"
+      @logout="emit('logout')"
+    />
 
     <main class="lobby-shell">
       <section class="hero-grid">
@@ -456,10 +479,10 @@ onMounted(refreshLobbyData)
               <div class="adventure-detail">
                 <h3>{{ lastAdventure.title }}</h3>
                 <p class="chapter">{{ lastAdventure.chapter }}</p>
-                <p class="group-name">当前团：追捕克伦可团</p>
+                <p class="group-name">{{ lastAdventure.groupName }}</p>
                 <div class="progress-meta">
                   <span>进度：{{ lastAdventure.progress }}%</span>
-                  <span>{{ lastAdventure.teamSync }}%</span>
+                  <span>同步：{{ lastAdventure.teamSync }}%</span>
                 </div>
                 <div class="progress-bar">
                   <div class="progress-fill" :style="{ width: `${lastAdventure.progress}%` }"></div>
@@ -532,7 +555,6 @@ onMounted(refreshLobbyData)
                 type="text"
                 class="form-input"
                 placeholder="请输入房间名称"
-                required
               />
             </div>
           </div>

@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from backend.app.core.exceptions import StoryForgeError
-from backend.app.models.models import Clue, GameSession, Report
+from backend.app.models.models import Clue, GameSession, Report, RoomMember
 from backend.app.schemas.session_schema import ReportDTO
 from backend.app.services.ai_service import get_ai_service
 from backend.app.services.context_builder import build_for_summary
@@ -18,11 +18,24 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+def _can_access_session(db: Session, session: GameSession, user_id: int) -> bool:
+    if session.user_id == user_id or session.host_user_id == user_id:
+        return True
+    if session.room_id is None:
+        return False
+    return (
+        db.query(RoomMember)
+        .filter(RoomMember.room_id == session.room_id, RoomMember.user_id == user_id)
+        .first()
+        is not None
+    )
+
+
 async def generate_report(db: Session, session_id: int, user_id: int) -> ReportDTO:
     session = db.get(GameSession, session_id)
     if session is None:
         raise StoryForgeError("session not found", status_code=404)
-    if session.user_id != user_id:
+    if not _can_access_session(db, session, user_id):
         raise StoryForgeError("forbidden", status_code=403)
 
     existing = db.query(Report).filter(Report.session_id == session_id).first()
@@ -59,7 +72,7 @@ async def generate_report(db: Session, session_id: int, user_id: int) -> ReportD
 
 def get_report(db: Session, session_id: int, user_id: int) -> ReportDTO:
     session = db.get(GameSession, session_id)
-    if session is None or session.user_id != user_id:
+    if session is None or not _can_access_session(db, session, user_id):
         raise StoryForgeError("session not found", status_code=404)
     report = db.query(Report).filter(Report.session_id == session_id).first()
     if report is None:

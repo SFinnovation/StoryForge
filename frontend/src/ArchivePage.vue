@@ -1,14 +1,18 @@
-﻿<script setup>
+<script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { sessionsApi } from './api/client'
-import systemBackground from '../背景/系统主界面.png'
+import AppNavbar from './components/AppNavbar.vue'
+import hallBackground from '../背景/大厅界面.png'
+import goblinCover from '../游戏种类/哥布林.jpg'
+import dndCover from '../游戏种类/龙与地下城.jpg'
+import dndCoverAlt from '../游戏种类/龙与地下城二.jpg'
 
-const emit = defineEmits(['navigate', 'logout', 'back-button-hidden'])
+const emit = defineEmits(['navigate', 'logout', 'enter-room', 'back-button-hidden', 'open-settings'])
 
 const props = defineProps({
-  currentPage: {
-    type: String,
-    default: '档案'
+  currentUser: {
+    type: Object,
+    default: null
   },
   latestSession: {
     type: Object,
@@ -17,1240 +21,1128 @@ const props = defineProps({
 })
 
 const searchKeyword = ref('')
-const activeNav = ref(props.currentPage)
-const selectedArchive = ref(0)
+const selectedArchiveId = ref(null)
 const sessions = ref([])
+const isLoading = ref(false)
+const deletingArchiveId = ref(null)
 const archiveStatus = ref('')
 
-const fallbackArchives = [
-  {
-    id: 1,
-    title: '龙与地下城 DND',
-    tags: ['奇幻', '冒险', '高自由度'],
-    character: '夜行者',
-    level: 12,
-    date: '2026.07.07',
-    status: '进行中',
-    statusColor: '#4ade80',
-    actionBtn: '继续冒险',
-    icon: '🐉',
-    chapter: '第三章 · 黑龙苏醒',
-    lastRecord: '你们进入废弃矿洞，发现古老龙族遗迹。',
-    hp: 78,
-    timeline: [
-      { event: '发现黑龙遗迹', date: '2026.07.07' },
-      { event: '获得龙鳞护符', date: '2026.07.06' },
-      { event: '完成地下城探索', date: '2026.07.05' }
-    ]
-  },
-  {
-    id: 2,
-    title: 'COC 7th',
-    tags: ['推理', '恐怖'],
-    character: '调查员',
-    level: 8,
-    date: '2026.06.20',
-    status: '已结束',
-    statusColor: '#f87171',
-    actionBtn: '查看总结',
-    icon: '🔱',
-    chapter: '终章 · 真相大白',
-    lastRecord: '真相浮出水面，一切归于寂静。',
-    hp: 100,
-    timeline: [
-      { event: '揭开神秘面纱', date: '2026.06.20' },
-      { event: '发现邪教据点', date: '2026.06.18' },
-      { event: '开始调查', date: '2026.06.15' }
-    ]
-  },
-  {
-    id: 3,
-    title: '赛博朋克2077',
-    tags: ['科幻', '都市'],
-    character: 'V',
-    level: 15,
-    date: '2026.06.10',
-    status: '暂停',
-    statusColor: '#fbbf24',
-    actionBtn: '继续探索',
-    icon: '🤖',
-    chapter: '第二章 · 夜之城',
-    lastRecord: '霓虹灯闪烁，夜之城的暗流涌动。',
-    hp: 65,
-    timeline: [
-      { event: '遭遇银手', date: '2026.06.10' },
-      { event: '获得义体升级', date: '2026.06.08' },
-      { event: '进入夜之城', date: '2026.06.05' }
-    ]
-  }
-]
-
-const mapSessionToArchive = (session) => ({
-  id: session.id,
-  title: session.title || `冒险会话 #${session.id}`,
-  tags: [session.status === 'playing' ? '进行中' : session.status],
-  character: '当前角色',
-  level: 1,
-  date: session.started_at ? new Date(session.started_at).toLocaleDateString() : '--',
-  status: session.status === 'playing' ? '进行中' : session.status,
-  statusColor: session.status === 'playing' ? '#4ade80' : '#fbbf24',
-  actionBtn: session.status === 'playing' ? '继续冒险' : '查看总结',
-  icon: '📜',
-  chapter: session.current_scene || '开局场景',
-  lastRecord: session.current_scene || '该会话已由后端创建，进入后可继续行动。',
-  hp: session.status === 'playing' ? 78 : 100,
-  sessionId: session.id,
-  timeline: [
-    {
-      event: session.current_scene || '会话已创建',
-      date: session.started_at ? new Date(session.started_at).toLocaleDateString() : '--'
-    }
-  ]
-})
-
-const archives = computed(() => {
-  const list = sessions.value.length > 0 ? sessions.value.map(mapSessionToArchive) : fallbackArchives
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return list
-
-  const filtered = list.filter((archive) => (
-    archive.title.toLowerCase().includes(keyword) ||
-    archive.tags.join(' ').toLowerCase().includes(keyword) ||
-    archive.lastRecord.toLowerCase().includes(keyword)
-  ))
-  return filtered.length > 0 ? filtered : list
-})
-
-const handleNavigate = (page) => {
-  activeNav.value = page
-  emit('navigate', page)
+const statusLabels = {
+  playing: '进行中',
+  finished: '已结束',
+  archived: '已归档'
 }
 
-const loadSessions = async () => {
-  archiveStatus.value = ''
-  try {
-    sessions.value = await sessionsApi.list()
-    if (selectedArchive.value >= archives.value.length) {
-      selectedArchive.value = 0
-    }
-  } catch (error) {
-    archiveStatus.value = error?.message || '档案列表同步失败，已显示本地示例。'
+const statusClasses = {
+  playing: 'state-running',
+  finished: 'state-finished',
+  archived: 'state-paused'
+}
+
+const fallbackArchive = {
+  id: 'module-krenko-preview',
+  sessionId: null,
+  roomId: null,
+  worldName: '龙与地下城 DND',
+  worldType: '世界观',
+  moduleTitle: "追捕克伦可 / 追捕克仑可 / Krenko's Way",
+  sessionTitle: '尚未开始的模组档案',
+  chapter: '锯齿监狱的委托',
+  lastRecord: '这是龙与地下城世界观下的冒险模组档案。创建或继续会话后，这里会展示真实跑团记录。',
+  characterName: '待绑定角色',
+  level: 1,
+  hp: 100,
+  maxHp: 100,
+  date: '待开始',
+  status: '待开始',
+  statusClass: 'state-paused',
+  cover: goblinCover,
+  tags: ['D&D 5e', '冒险模组', '城市追捕']
+}
+
+const formatDate = (value) => {
+  if (!value) return '未记录'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
+const normalizeModuleTitle = (session) => {
+  if (session.adventure_module_title) return session.adventure_module_title
+  const source = `${session.title || ''} ${session.current_scene || ''}`.toLowerCase()
+  if (source.includes('krenko') || source.includes('克伦可') || source.includes('克仑可')) {
+    return "追捕克伦可 / 追捕克仑可 / Krenko's Way"
   }
+  return '未绑定模组'
+}
+
+const normalizeWorldName = (session) => {
+  if (session.world_name) return session.world_name
+  const source = `${session.title || ''} ${session.current_scene || ''}`.toLowerCase()
+  if (source.includes('dnd') || source.includes('龙与地下城') || source.includes('krenko')) {
+    return '龙与地下城 DND'
+  }
+  return '未知世界观'
+}
+
+const coverForArchive = (worldName, moduleTitle, index) => {
+  const source = `${worldName} ${moduleTitle}`.toLowerCase()
+  if (source.includes('krenko') || source.includes('克伦可') || source.includes('克仑可')) return goblinCover
+  if (source.includes('dnd') || source.includes('龙与地下城')) return index % 2 === 0 ? dndCover : dndCoverAlt
+  return dndCoverAlt
+}
+
+const hpPercent = (hp, maxHp) => {
+  const safeMax = Number(maxHp) || 100
+  const safeHp = Number(hp) || safeMax
+  return Math.max(0, Math.min(100, Math.round((safeHp / safeMax) * 100)))
+}
+
+const mapSessionToArchive = (session, index) => {
+  const worldName = normalizeWorldName(session)
+  const moduleTitle = normalizeModuleTitle(session)
+  const status = statusLabels[session.status] || session.status || '已归档'
+  const chapter = session.current_scene || session.adventure_module_scene || '开局场景'
+  const lastRecord = session.current_task || session.summary || session.current_scene || '该会话暂无记录摘要。进入房间后继续行动，后端会继续写入数据库。'
+  const characterHp = session.character_hp ?? 10
+  const characterMaxHp = session.character_max_hp ?? 10
+
+  return {
+    id: `session-${session.id}`,
+    sessionId: session.id,
+    roomId: session.room_id,
+    worldName,
+    worldType: '世界观',
+    moduleTitle,
+    sessionTitle: session.title || `会话 #${session.id}`,
+    chapter,
+    lastRecord,
+    characterName: session.character_name || '当前角色',
+    level: session.character_level || 1,
+    hp: characterHp,
+    maxHp: characterMaxHp,
+    hpPercent: hpPercent(characterHp, characterMaxHp),
+    date: formatDate(session.started_at),
+    status,
+    statusClass: statusClasses[session.status] || 'state-paused',
+    cover: coverForArchive(worldName, moduleTitle, index),
+    tags: [
+      worldName,
+      moduleTitle === '未绑定模组' ? '未绑定模组' : '冒险模组',
+      status
+    ]
+  }
+}
+
+const sourceArchives = computed(() => {
+  const mapped = sessions.value.map(mapSessionToArchive)
+  return mapped.length > 0 ? mapped : [fallbackArchive]
+})
+
+const filteredArchives = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) return sourceArchives.value
+
+  return sourceArchives.value.filter((archive) => {
+    const haystack = [
+      archive.worldName,
+      archive.moduleTitle,
+      archive.sessionTitle,
+      archive.chapter,
+      archive.lastRecord,
+      archive.characterName,
+      ...archive.tags
+    ].join(' ').toLowerCase()
+    return haystack.includes(keyword)
+  })
+})
+
+const selectedArchive = computed(() => {
+  const archives = filteredArchives.value
+  return archives.find((item) => item.id === selectedArchiveId.value) || archives[0] || fallbackArchive
+})
+
+const worldCount = computed(() => new Set(sourceArchives.value.map((archive) => archive.worldName)).size)
+const moduleCount = computed(() => new Set(sourceArchives.value.map((archive) => `${archive.worldName}:${archive.moduleTitle}`)).size)
+const sessionCount = computed(() => sourceArchives.value.filter((archive) => archive.sessionId).length)
+
+const selectArchive = (archive) => {
+  selectedArchiveId.value = archive.id
 }
 
 const handleSearch = () => {
-  selectedArchive.value = 0
+  selectedArchiveId.value = filteredArchives.value[0]?.id || null
 }
 
-const selectArchive = (index) => {
-  if (index < 0) return
-  selectedArchive.value = index
+const handleNavigate = (page) => {
+  emit('navigate', page)
 }
 
-const handleAction = (archive) => {
-  selectArchive(archives.value.findIndex((item) => item.id === archive.id))
+const handleContinue = (archive) => {
+  selectArchive(archive)
+  if (archive.roomId) {
+    emit('enter-room', { roomId: archive.roomId })
+    return
+  }
   archiveStatus.value = archive.sessionId
-    ? `已选中会话 #${archive.sessionId}，行动页完成后可继续冒险。`
-    : `${archive.actionBtn}：${archive.title}`
+    ? `已选中会话 #${archive.sessionId}：${archive.worldName} / ${archive.moduleTitle}`
+    : `已选中模组：${archive.worldName} / ${archive.moduleTitle}`
 }
 
-watch(() => props.latestSession, () => {
+const handleDeleteArchive = async (archive) => {
+  selectArchive(archive)
+  if (!archive.sessionId) {
+    archiveStatus.value = '这是本地模组预览，没有可删除的会话记录。'
+    return
+  }
+
+  const confirmed = window.confirm(`确定删除「${archive.sessionTitle}」吗？删除后该房间名称可再次使用。`)
+  if (!confirmed) return
+
+  deletingArchiveId.value = archive.id
+  archiveStatus.value = ''
+  try {
+    await sessionsApi.delete(archive.sessionId)
+    sessions.value = sessions.value.filter((session) => session.id !== archive.sessionId)
+    selectedArchiveId.value = filteredArchives.value[0]?.id || null
+    archiveStatus.value = `已删除「${archive.sessionTitle}」，房间名已释放。`
+  } catch (error) {
+    archiveStatus.value = error?.message || '删除档案失败。'
+  } finally {
+    deletingArchiveId.value = null
+  }
+}
+
+const loadSessions = async () => {
+  isLoading.value = true
+  archiveStatus.value = ''
+  try {
+    sessions.value = await sessionsApi.list()
+    selectedArchiveId.value = filteredArchives.value[0]?.id || null
+  } catch (error) {
+    sessions.value = []
+    archiveStatus.value = error?.message || '档案同步失败，已显示本地模组预览。'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+watch(searchKeyword, handleSearch)
+watch(() => props.latestSession, loadSessions)
+
+onMounted(() => {
+  emit('back-button-hidden', false)
   loadSessions()
 })
-
-onMounted(loadSessions)
 </script>
 
 <template>
   <div class="archive-page">
-    <div class="page-bg" :style="{ backgroundImage: `url(${systemBackground})` }">
-      <div class="bg-overlay"></div>
-      <div class="particles"></div>
-    </div>
+    <div class="page-backdrop" :style="{ backgroundImage: `url(${hallBackground})` }"></div>
 
-    <nav class="navbar">
-      <div class="nav-logo">
-        <svg viewBox="0 0 32 32" fill="none" class="logo-icon">
-          <polygon points="16,2 28,10 28,22 16,30 4,22 4,10" fill="#f5b95b"/>
-          <polygon points="16,4 26,10 26,22 16,28 6,22 6,10" fill="#d49a3f"/>
-          <circle cx="16" cy="16" r="4" fill="#1a1a2e"/>
-          <text x="16" y="19" text-anchor="middle" fill="#f5b95b" font-size="8" font-weight="bold">SF</text>
-        </svg>
-        <div class="logo-text">
-          <span class="logo-en">StoryForge</span>
-          <span class="logo-cn">灵境档案</span>
-        </div>
-      </div>
-      <div class="nav-menu">
-      </div>
-      <div class="nav-user">
-        <div class="user-avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-        </div>
-        <div class="user-info">
-          <span class="user-name">夜行者</span>
-          <span class="user-level">Lv.12</span>
-        </div>
-        <button class="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 01-3.46 0"/>
-          </svg>
-        </button>
-        <button class="nav-icon" aria-label="退出登录" @click="emit('logout')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M10 17l5-5-5-5"/>
-            <path d="M15 12H3"/>
-            <path d="M21 3v18h-8"/>
-          </svg>
-        </button>
-      </div>
-    </nav>
+    <div class="page-shell">
+      <AppNavbar
+        :current-user="props.currentUser"
+        :sub-label="`${sessionCount} 局记录`"
+        @open-settings="emit('open-settings')"
+        @logout="emit('logout')"
+      />
 
-    <main class="main-content">
-      <section class="banner-section">
-        <div class="banner-bg">
-          <div class="banner-overlay"></div>
-          <div class="runes"></div>
-        </div>
-        <div class="banner-content">
-          <div class="title-wrap">
-            <span class="decor-line"></span>
-            <h1 class="banner-title">档案馆</h1>
-            <span class="decor-line"></span>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="hero-title-row">
+            <span class="hero-line"></span>
+            <h2>档案馆</h2>
+            <span class="hero-line"></span>
           </div>
-          <p class="banner-subtitle">保存和回看过去的跑团记录。</p>
+          <p>按世界观保存模组，再回看具体跑团记录。</p>
         </div>
-        <div class="search-section">
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="search-icon">
-              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+
+        <div class="hero-tools">
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               v-model="searchKeyword"
-              type="text"
-              class="search-input"
-              placeholder="搜索历史档案..."
+              type="search"
+              placeholder="搜索世界观、模组或会话..."
               @keyup.enter="handleSearch"
             />
+          </label>
+          <div class="tool-btn">
+            <span>{{ worldCount }}</span>
+            世界观
           </div>
-          <button class="filter-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-              <polyline points="6 10 12 14 18 10"/>
-              <line x1="12" y1="20" x2="12" y2="14"/>
-            </svg>
-            筛选
-          </button>
-          <button class="layout-toggle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="3" y="3" width="7" height="7"/>
-              <rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/>
-            </svg>
-          </button>
+          <div class="tool-btn">
+            <span>{{ moduleCount }}</span>
+            模组
+          </div>
         </div>
       </section>
 
       <p v-if="archiveStatus" class="archive-status">{{ archiveStatus }}</p>
 
-      <section class="archive-content">
-        <div class="archive-list">
-          <h2 class="list-title">历史档案</h2>
-          <div class="cards-grid">
-            <div
-              v-for="(archive, index) in archives"
+      <section class="content-grid">
+        <div>
+          <h3 class="section-label">历史档案</h3>
+
+          <div v-if="isLoading" class="loading-panel">正在同步档案...</div>
+          <div v-else-if="filteredArchives.length" class="archive-grid">
+            <article
+              v-for="archive in filteredArchives"
               :key="archive.id"
               class="archive-card"
-              :class="{ active: selectedArchive === index }"
-              @click="selectArchive(index)"
+              :class="{ active: selectedArchive.id === archive.id }"
+              @click="selectArchive(archive)"
             >
-              <div class="card-corner top-left"></div>
-              <div class="card-corner top-right"></div>
-              <div class="card-corner bottom-left"></div>
-              <div class="card-corner bottom-right"></div>
-              <div class="card-header">
-                <h3 class="archive-title">{{ archive.title }}</h3>
+              <div class="archive-cover">
+                <img :src="archive.cover" :alt="archive.moduleTitle" />
               </div>
-              <div class="card-body">
-                <div class="archive-tags">
-                  <span
-                    v-for="(tag, tagIndex) in archive.tags"
-                    :key="tagIndex"
-                    class="tag"
-                  >
-                    {{ tag }}
-                  </span>
+              <div class="archive-body">
+                <div class="path-line">
+                  <span>{{ archive.worldType }}</span>
+                  <strong>{{ archive.worldName }}</strong>
                 </div>
-                <div class="archive-info">
-                  <div class="info-item">
-                    <div class="char-avatar">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                        <circle cx="12" cy="7" r="4"/>
-                      </svg>
-                    </div>
-                    <span class="char-name">{{ archive.character }} Lv.{{ archive.level }}</span>
-                  </div>
-                  <div class="info-item">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    <span>{{ archive.date }}</span>
+                <h3>{{ archive.moduleTitle }}</h3>
+                <div class="tag-row">
+                  <span v-for="tag in archive.tags" :key="tag" class="tag">{{ tag }}</span>
+                </div>
+                <div class="archive-meta">
+                  <div class="mini-avatar"></div>
+                  <div>
+                    <strong>{{ archive.characterName }}　Lv.{{ archive.level }}</strong>
+                    <span>{{ archive.sessionTitle }} · {{ archive.date }}</span>
                   </div>
                 </div>
-                <div class="status-bar">
-                  <span class="status-label">状态</span>
-                  <span class="status-value" :style="{ color: archive.statusColor }">
-                    {{ archive.status }}
-                  </span>
+                <div class="archive-state">
+                  <span>当前状态</span>
+                  <span class="state-value" :class="archive.statusClass">{{ archive.status }}</span>
                 </div>
               </div>
-              <button class="card-btn" @click.stop="handleAction(archive)">
-                {{ archive.actionBtn }}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
+              <button class="archive-action" type="button" @click.stop="handleContinue(archive)">
+                {{ archive.roomId ? '继续进入房间' : '查看档案详情' }}
+                <span aria-hidden="true">→</span>
               </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="archive-detail">
-          <div class="detail-card">
-            <div class="card-header">
-              <span class="header-icon">📜</span>
-              <h4 class="header-title">当前档案</h4>
-            </div>
-            <div class="detail-content">
-              <div class="detail-title-row">
-                <div class="detail-info">
-                  <h3 class="detail-title">{{ archives[selectedArchive].title }}</h3>
-                  <p class="detail-chapter">{{ archives[selectedArchive].chapter }}</p>
-                </div>
-              </div>
-              <div class="record-section">
-                <h5 class="section-title">最后记录</h5>
-                <p class="record-text">{{ archives[selectedArchive].lastRecord }}</p>
-              </div>
-              <div class="status-section">
-                <h5 class="section-title">角色状态</h5>
-                <div class="status-grid">
-                  <div class="status-item">
-                    <span class="status-name">HP</span>
-                    <div class="hp-bar">
-                      <div class="hp-fill" :style="{ width: archives[selectedArchive].hp + '%' }"></div>
-                    </div>
-                    <span class="status-num">{{ archives[selectedArchive].hp }}%</span>
-                  </div>
-                  <div class="status-item">
-                    <span class="status-name">等级</span>
-                    <span class="status-value-lg">Lv.{{ archives[selectedArchive].level }}</span>
-                  </div>
-                </div>
-              </div>
-              <button class="enter-btn">
-                继续进入冒险
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="timeline-card">
-            <div class="card-header">
-              <span class="header-icon">🕐</span>
-              <h4 class="header-title">最近事件</h4>
-            </div>
-            <div class="timeline-content">
-              <div
-                v-for="(event, index) in archives[selectedArchive].timeline"
-                :key="index"
-                class="timeline-item"
+              <button
+                class="archive-delete"
+                type="button"
+                :disabled="deletingArchiveId === archive.id || !archive.sessionId"
+                @click.stop="handleDeleteArchive(archive)"
               >
-                <span class="timeline-dot"></span>
-                <div class="timeline-line"></div>
-                <div class="timeline-info">
-                  <span class="timeline-event">{{ event.event }}</span>
-                  <span class="timeline-date">{{ event.date }}</span>
-                </div>
+                {{ deletingArchiveId === archive.id ? '删除中...' : '删除档案' }}
+              </button>
+            </article>
+          </div>
+          <div v-else class="loading-panel">没有匹配的档案。</div>
+
+        </div>
+
+        <aside class="detail-panel">
+          <div class="detail-head">当前档案</div>
+          <div class="detail-main">
+            <div class="dragon-seal">D20</div>
+            <h3>{{ selectedArchive.worldName }}</h3>
+          </div>
+
+          <section class="detail-block">
+            <h4>层级</h4>
+            <div class="detail-path">
+              <div>
+                <span>世界观</span>
+                <strong>{{ selectedArchive.worldName }}</strong>
+              </div>
+              <div>
+                <span>模组</span>
+                <strong>{{ selectedArchive.moduleTitle }}</strong>
+              </div>
+              <div>
+                <span>会话</span>
+                <strong>{{ selectedArchive.sessionId ? `#${selectedArchive.sessionId}` : '尚未开始' }}</strong>
               </div>
             </div>
-          </div>
-        </div>
+          </section>
+
+          <section class="detail-block">
+            <h4>章节</h4>
+            <div class="detail-text">{{ selectedArchive.chapter }}</div>
+          </section>
+
+          <section class="detail-block">
+            <h4>最后记录</h4>
+            <div class="detail-text">{{ selectedArchive.lastRecord }}</div>
+          </section>
+
+          <section class="detail-block">
+            <h4>角色状态</h4>
+            <div class="status-row">
+              <div>
+                <div class="hp-head">
+                  <span>HP</span>
+                  <span>{{ selectedArchive.hpPercent || hpPercent(selectedArchive.hp, selectedArchive.maxHp) }}%</span>
+                </div>
+                <div class="hp-track">
+                  <div
+                    class="hp-fill"
+                    :style="{ width: `${selectedArchive.hpPercent || hpPercent(selectedArchive.hp, selectedArchive.maxHp)}%` }"
+                  ></div>
+                </div>
+              </div>
+              <div class="level-row">
+                <span>等级</span>
+                <strong>Lv.{{ selectedArchive.level }}</strong>
+              </div>
+            </div>
+          </section>
+
+          <button class="enter-btn" type="button" @click="handleContinue(selectedArchive)">
+            {{ selectedArchive.roomId ? '继续进入冒险' : '查看档案层级' }}
+            <span aria-hidden="true">→</span>
+          </button>
+          <button
+            class="detail-delete-btn"
+            type="button"
+            :disabled="deletingArchiveId === selectedArchive.id || !selectedArchive.sessionId"
+            @click="handleDeleteArchive(selectedArchive)"
+          >
+            {{ deletingArchiveId === selectedArchive.id ? '删除中...' : '删除当前档案' }}
+          </button>
+        </aside>
       </section>
-    </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
+:global(body) {
+  margin: 0;
+}
+
 .archive-page {
+  --sf-bg: #06080d;
+  --sf-panel: rgba(12, 14, 20, 0.9);
+  --sf-gold: #d8a84a;
+  --sf-gold-bright: #ffd889;
+  --sf-ink: #f5e9d0;
+  --sf-ink-soft: #c9b99b;
+  --sf-ink-muted: #8e836d;
+  --sf-arcane: #6fdcff;
+  --sf-border: rgba(216, 168, 74, 0.28);
+  --sf-border-strong: rgba(255, 216, 137, 0.62);
+  --sf-shadow: 0 24px 60px rgba(0, 0, 0, 0.58);
   min-height: 100vh;
   position: relative;
-  background: #090806;
+  overflow-x: hidden;
+  background: var(--sf-bg);
+  color: var(--sf-ink);
+  font-family: "Noto Serif SC", "Microsoft YaHei", serif;
 }
 
-.page-bg {
+.page-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-size: cover;
-  background-position: center;
+  inset: 0;
   z-index: 0;
-  opacity: 0.1;
+  background-position: center;
+  background-size: cover;
 }
 
-.bg-overlay {
+.page-backdrop::before,
+.page-backdrop::after {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(180deg, rgba(9, 8, 6, 0.95) 0%, rgba(9, 8, 6, 0.98) 100%);
-}
-
-.particles {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(circle, rgba(245, 185, 91, 0.1) 1px, transparent 1px);
-  background-size: 40px 40px;
-  animation: float 20s infinite;
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(1deg); }
+.page-backdrop::before {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.66), rgba(0, 0, 0, 0.82)),
+    linear-gradient(90deg, rgba(2, 5, 10, 0.92), rgba(2, 5, 10, 0.36) 48%, rgba(2, 5, 10, 0.88));
+}
+
+.page-backdrop::after {
+  background:
+    radial-gradient(circle at 58% 14%, rgba(255, 183, 72, 0.12), transparent 18%),
+    radial-gradient(circle at 66% 12%, rgba(111, 220, 255, 0.18), transparent 16%),
+    radial-gradient(circle at center, transparent 34%, rgba(0, 0, 0, 0.76) 100%);
+}
+
+.page-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1540px;
+  margin: 0 auto;
+  padding: 18px 24px 28px;
 }
 
 .navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
+  height: 70px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 300px 1fr 300px;
   align-items: center;
-  padding: 0 40px;
-  background: rgba(9, 8, 6, 0.98);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(245, 185, 91, 0.2);
-  z-index: 100;
+  gap: 12px;
+  border-bottom: 1px solid rgba(216, 168, 74, 0.2);
 }
 
-.nav-logo {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: center;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-icon {
-  width: 36px;
-  height: 36px;
-}
-
-.logo-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.logo-en {
-  font-size: 16px;
-  font-weight: 800;
-  color: #f5b95b;
-  letter-spacing: 1px;
-}
-
-.logo-cn {
-  font-size: 10px;
-  color: #ffe0a3;
-  letter-spacing: 2px;
-}
-
-.nav-menu {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
-  display: flex;
-  gap: 4px;
-}
-
-.nav-item {
-  padding: 10px 28px;
-  background: none;
-  border: none;
-  color: #b0b7c3;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-}
-
-.nav-item:hover {
-  color: #ffffff;
-}
-
-.nav-item.active {
-  color: #f5b95b;
-  background: rgba(245, 185, 91, 0.2);
-  border-bottom: 2px solid #f5b95b;
-}
-
-.nav-user {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
+.brand,
+.user-box,
+.archive-meta,
+.hero-title-row,
+.hero-tools,
+.section-label,
+.detail-head,
+.detail-main,
+.hp-head,
+.level-row {
   display: flex;
   align-items: center;
+}
+
+.brand {
   gap: 14px;
 }
 
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(245, 185, 91, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(245, 185, 91, 0.5);
-}
-
-.user-avatar svg {
-  width: 22px;
-  height: 22px;
-  color: #f5b95b;
-}
-
-.user-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.user-name {
-  font-size: 14px;
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.user-level {
-  padding: 2px 10px;
-  background: rgba(245, 185, 91, 0.2);
-  border: 1px solid rgba(245, 185, 91, 0.5);
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--sf-border-strong);
   border-radius: 12px;
-  font-size: 12px;
-  color: #f5b95b;
+  display: grid;
+  place-items: center;
+  color: var(--sf-gold);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.brand-mark svg {
+  width: 30px;
+  height: 30px;
+}
+
+.brand-copy h1 {
+  margin: 0;
+  font-size: 28px;
+  color: var(--sf-gold-bright);
+  font-family: Georgia, "Times New Roman", serif;
   font-weight: 600;
 }
 
-.nav-icon {
-  width: 36px;
-  height: 36px;
+.brand-copy p {
+  margin: 3px 0 0;
+  color: var(--sf-ink-soft);
+  font-size: 14px;
+  letter-spacing: 0.18em;
+}
+
+.nav-links {
   display: flex;
-  align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 8px;
-  color: #b0b7c3;
+  gap: 44px;
+}
+
+.nav-links button {
+  position: relative;
+  border: 0;
+  background: transparent;
+  color: var(--sf-ink);
+  font: inherit;
+  font-size: 18px;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.nav-icon:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+.nav-links button.active {
+  color: var(--sf-gold-bright);
 }
 
-.nav-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.main-content {
-  position: relative;
-  z-index: 10;
-  padding-top: 80px;
-}
-
-.banner-section {
-  position: relative;
-  height: 220px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.banner-bg {
+.nav-links button.active::after {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #090806 0%, #1a1510 50%, #090806 100%);
+  left: 50%;
+  bottom: -18px;
+  width: 90px;
+  height: 14px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at center, rgba(255, 217, 137, 0.95) 0 16%, transparent 18%),
+    linear-gradient(90deg, transparent, rgba(216, 168, 74, 0.8), transparent);
 }
 
-.banner-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: 
-    radial-gradient(ellipse at center top, rgba(245, 185, 91, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at center bottom, rgba(111, 232, 255, 0.05) 0%, transparent 50%);
+.user-box {
+  justify-content: flex-end;
+  gap: 18px;
 }
 
-.runes {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.1;
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5L35 20L50 25L38 38L42 55L30 45L18 55L22 38L10 25L25 20Z' fill='%23f5b95b'/%3E%3C/svg%3E");
-  background-size: 60px 60px;
+.user-avatar,
+.mini-avatar {
+  border-radius: 50%;
+  border: 1px solid var(--sf-border-strong);
+  background:
+    radial-gradient(circle at 40% 30%, rgba(255, 214, 143, 0.28), transparent 36%),
+    linear-gradient(180deg, #332618, #110e0b);
+  box-shadow: 0 0 18px rgba(216, 168, 74, 0.2);
 }
 
-.banner-content {
-  position: relative;
-  z-index: 2;
-  text-align: center;
+.user-avatar {
+  width: 58px;
+  height: 58px;
 }
 
-.title-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  margin-bottom: 16px;
+.user-meta strong {
+  display: block;
+  color: var(--sf-ink);
+  font-size: 20px;
+  margin-bottom: 4px;
 }
 
-.decor-line {
-  width: 150px;
+.user-meta span {
+  color: var(--sf-ink-soft);
+  font-size: 15px;
+}
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--sf-border);
+  background: rgba(8, 10, 15, 0.5);
+  color: var(--sf-gold-bright);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.3fr 0.9fr;
+  gap: 24px;
+  min-height: 280px;
+  padding: 32px 8px 18px;
+}
+
+.hero-copy {
+  padding: 22px 0 0 8px;
+}
+
+.hero-title-row {
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.hero-line {
+  width: 62px;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #f5b95b, transparent);
+  background: linear-gradient(90deg, transparent, var(--sf-gold-bright), transparent);
 }
 
-.banner-title {
-  font-size: 48px;
-  font-weight: 900;
-  color: #eac77a;
-  letter-spacing: 24px;
-  font-family: 'KaiTi', 'STKaiti', 'SimSun', serif;
-  text-shadow: 0 0 60px rgba(234, 199, 122, 0.4);
+.hero h2 {
+  margin: 0;
+  font-size: 86px;
+  line-height: 1;
+  color: var(--sf-gold-bright);
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 30px rgba(216, 168, 74, 0.22);
 }
 
-.banner-subtitle {
-  font-size: 16px;
-  color: #b99a58;
-  font-weight: 400;
+.hero p {
+  margin: 8px 0 0 96px;
+  color: var(--sf-gold-bright);
+  font-size: 22px;
 }
 
-.search-section {
-  position: absolute;
-  bottom: -26px;
-  right: 40px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.hero-tools {
+  align-self: end;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-bottom: 18px;
+}
+
+.tool-btn,
+.search-box {
+  min-height: 62px;
+  border: 1px solid var(--sf-border);
+  background: rgba(10, 12, 18, 0.72);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .search-box {
+  width: 330px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 320px;
-  padding: 12px 20px;
-  background: rgba(9, 8, 6, 0.9);
-  border: 1px solid rgba(245, 185, 91, 0.4);
-  border-radius: 10px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 0 20px rgba(245, 185, 91, 0.1);
+  gap: 14px;
+  padding: 0 20px;
+  color: var(--sf-ink-muted);
 }
 
-.search-icon {
+.search-box svg {
   width: 20px;
   height: 20px;
-  color: #9ca3af;
+  flex: 0 0 auto;
 }
 
-.search-input {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  color: #ffffff;
-  font-size: 14px;
+.search-box input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--sf-ink);
+  font-size: 15px;
 }
 
-.search-input::placeholder {
-  color: #6b7280;
+.search-box input::placeholder {
+  color: var(--sf-ink-muted);
 }
 
-.filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: rgba(245, 185, 91, 0.2);
-  border: 1px solid rgba(245, 185, 91, 0.5);
-  border-radius: 10px;
-  color: #f5b95b;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.tool-btn {
+  min-width: 118px;
+  padding: 0 22px;
+  color: var(--sf-gold-bright);
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  font-size: 15px;
 }
 
-.filter-btn:hover {
-  background: rgba(245, 185, 91, 0.3);
-  border-color: #f5b95b;
-}
-
-.filter-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.layout-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: rgba(245, 185, 91, 0.15);
-  border: 1px solid rgba(245, 185, 91, 0.3);
-  border-radius: 10px;
-  color: #f5b95b;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.layout-toggle:hover {
-  background: rgba(245, 185, 91, 0.25);
-}
-
-.layout-toggle svg {
-  width: 18px;
-  height: 18px;
-}
-
-.archive-content {
-  display: flex;
-  gap: 32px;
-  padding: 48px;
-  max-width: 1400px;
-  margin: 0 auto;
+.tool-btn span {
+  font-size: 22px;
+  font-weight: 800;
 }
 
 .archive-status {
-  position: relative;
-  z-index: 10;
-  max-width: 1400px;
-  margin: 42px auto -24px;
-  padding: 0 48px;
-  color: #f5b95b;
-  font-size: 13px;
+  margin: 0 8px 18px;
+  color: var(--sf-gold-bright);
+  font-size: 14px;
 }
 
-.archive-list {
-  flex: 0.7;
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 28px;
 }
 
-.list-title {
+.section-label {
+  gap: 14px;
+  justify-content: center;
+  color: var(--sf-gold-bright);
   font-size: 20px;
-  font-weight: 800;
-  color: #f5b95b;
-  margin-bottom: 24px;
-  letter-spacing: 4px;
+  margin: 0 0 18px;
 }
 
-.cards-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
+.section-label::before,
+.section-label::after {
+  content: "";
+  width: 32px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sf-gold), transparent);
+}
+
+.archive-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .archive-card {
   position: relative;
-  width: 420px;
-  background: #090806;
-  border: 1px solid rgba(245, 185, 91, 0.4);
-  border-radius: 12px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.4s ease;
+  border-radius: 22px;
   overflow: hidden;
+  border: 1px solid var(--sf-border);
+  background: rgba(7, 9, 14, 0.82);
+  box-shadow: var(--sf-shadow);
+  min-height: 610px;
+  cursor: pointer;
+}
+
+.archive-card.active {
+  border-color: var(--sf-border-strong);
+  box-shadow: 0 0 28px rgba(216, 168, 74, 0.28), var(--sf-shadow);
 }
 
 .archive-card::before {
-  content: '';
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: linear-gradient(#090806, #090806) padding-box,
-              linear-gradient(135deg, rgba(245, 185, 91, 0.3), rgba(245, 185, 91, 0.1), rgba(245, 185, 91, 0.3)) border-box;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-}
-
-.archive-card:hover,
-.archive-card.active {
-  border-color: rgba(245, 185, 91, 0.8);
-  box-shadow: 0 0 30px rgba(245, 185, 91, 0.2),
-              inset 0 0 30px rgba(245, 185, 91, 0.05);
-}
-
-.archive-card:hover::before,
-.archive-card.active::before {
-  opacity: 1;
-}
-
-.card-corner {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  border-color: #f5b95b;
-  border-style: solid;
-  border-width: 0;
-  opacity: 0.6;
-}
-
-.card-corner.top-left {
-  top: 8px;
-  left: 8px;
-  border-top-width: 2px;
-  border-left-width: 2px;
-}
-
-.card-corner.top-right {
-  top: 8px;
-  right: 8px;
-  border-top-width: 2px;
-  border-right-width: 2px;
-}
-
-.card-corner.bottom-left {
-  bottom: 8px;
-  left: 8px;
-  border-bottom-width: 2px;
-  border-left-width: 2px;
-}
-
-.card-corner.bottom-right {
-  bottom: 8px;
-  right: 8px;
-  border-bottom-width: 2px;
-  border-right-width: 2px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.archive-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #eac77a;
-  letter-spacing: 2px;
-}
-
-.card-body {
-  margin-bottom: 16px;
-}
-
-.archive-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.tag {
-  padding: 4px 12px;
-  background: rgba(245, 185, 91, 0.15);
-  border: 1px solid rgba(245, 185, 91, 0.3);
-  border-radius: 6px;
-  font-size: 12px;
-  color: #ffe0a3;
-}
-
-.archive-info {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: #b0b7c3;
-}
-
-.info-item svg {
-  width: 16px;
-  height: 16px;
-  color: #9ca3af;
-}
-
-.char-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(245, 185, 91, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(245, 185, 91, 0.4);
-}
-
-.char-avatar svg {
-  width: 14px;
-  height: 14px;
-  color: #f5b95b;
-}
-
-.char-name {
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid rgba(245, 185, 91, 0.2);
-}
-
-.status-label {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.status-value {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.card-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 12px;
-  background: linear-gradient(135deg, #5a4a1d 0%, #7b6425 50%, #5a4a1d 100%);
-  border: 1px solid #f5b95b;
-  border-radius: 8px;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.card-btn:hover {
-  background: linear-gradient(135deg, #6a5a2d 0%, #8b7435 50%, #6a5a2d 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(245, 185, 91, 0.4);
-}
-
-.card-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.archive-detail {
-  flex: 0.3;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.detail-card,
-.timeline-card {
-  background: rgba(40, 45, 55, 0.95);
-  border: 1px solid rgba(245, 185, 91, 0.35);
+  inset: 10px;
+  border: 1px solid rgba(216, 168, 74, 0.22);
   border-radius: 16px;
-  padding: 24px;
+  pointer-events: none;
+  z-index: 2;
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(245, 185, 91, 0.35);
+.archive-cover {
+  position: relative;
+  height: 380px;
+  overflow: hidden;
+  background: #0d1117;
 }
 
-.header-icon {
-  font-size: 18px;
+.archive-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-.header-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #f5b95b;
-  text-shadow: 0 0 20px rgba(245, 185, 91, 0.3);
+.archive-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 6, 10, 0.08), rgba(4, 6, 10, 0.64));
 }
 
-.detail-title-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+.archive-body {
+  padding: 18px 22px 0;
 }
 
-.detail-info {
-  flex: 1;
-}
-
-.detail-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #eac77a;
-  margin-bottom: 4px;
-}
-
-.detail-chapter {
-  font-size: 13px;
-  color: #b99a58;
-}
-
-.record-section {
-  margin-bottom: 20px;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffe0a3;
+.path-line {
+  display: grid;
+  gap: 4px;
   margin-bottom: 12px;
 }
 
-.record-text {
-  font-size: 13px;
-  color: #d1d5db;
-  line-height: 1.7;
-  padding: 12px;
-  background: rgba(9, 8, 6, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(245, 185, 91, 0.2);
-}
-
-.status-section {
-  margin-bottom: 20px;
-}
-
-.status-grid {
-  display: flex;
-  gap: 16px;
-}
-
-.status-item {
-  flex: 1;
-}
-
-.status-name {
-  display: block;
+.path-line span {
+  color: var(--sf-arcane);
   font-size: 12px;
-  color: #9ca3af;
-  margin-bottom: 8px;
 }
 
-.hp-bar {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+.path-line strong {
+  color: var(--sf-ink-soft);
+  font-size: 14px;
+}
+
+.archive-body h3 {
+  margin: 0 0 12px;
+  min-height: 70px;
+  font-size: 27px;
+  line-height: 1.28;
+  color: var(--sf-gold-bright);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.tag {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 168, 74, 0.34);
+  background: rgba(216, 168, 74, 0.08);
+  color: var(--sf-ink-soft);
+  font-size: 13px;
+}
+
+.archive-meta {
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.mini-avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+}
+
+.archive-meta strong {
+  display: block;
+  font-size: 16px;
+  color: var(--sf-ink);
+  margin-bottom: 4px;
+}
+
+.archive-meta span,
+.archive-date {
+  color: var(--sf-ink-soft);
+  font-size: 14px;
+}
+
+.archive-state {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  color: var(--sf-ink-soft);
+  font-size: 14px;
+}
+
+.state-value {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.state-running {
+  color: #9ad66f;
+}
+
+.state-paused {
+  color: #ffc65b;
+}
+
+.state-finished {
+  color: #9fb0c4;
+}
+
+.archive-action {
+  width: calc(100% - 44px);
+  margin: 18px 22px 10px;
+  min-height: 56px;
+  border-radius: 14px;
+  border: 1px solid var(--sf-border-strong);
+  background:
+    linear-gradient(180deg, rgba(255, 214, 143, 0.18), rgba(145, 95, 28, 0.22)),
+    rgba(11, 10, 7, 0.92);
+  color: var(--sf-gold-bright);
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.archive-delete,
+.detail-delete-btn {
+  width: calc(100% - 44px);
+  min-height: 44px;
+  margin: 0 22px 22px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  background: rgba(75, 20, 20, 0.34);
+  color: #ffc3c3;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.archive-delete:hover:not(:disabled),
+.detail-delete-btn:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.78);
+  background: rgba(116, 30, 30, 0.42);
+}
+
+.archive-delete:disabled,
+.detail-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.detail-panel,
+.loading-panel {
+  border: 1px solid var(--sf-border);
+  border-radius: 24px;
+  background: rgba(10, 12, 18, 0.78);
+  box-shadow: var(--sf-shadow);
+}
+
+.loading-panel {
+  padding: 42px;
+  color: var(--sf-ink-soft);
+  text-align: center;
+}
+
+.detail-panel {
+  background:
+    linear-gradient(180deg, rgba(10, 11, 16, 0.94), rgba(8, 9, 14, 0.96)),
+    rgba(10, 11, 16, 0.92);
+  padding: 18px 22px 22px;
+  min-height: 610px;
+}
+
+.detail-head {
+  gap: 12px;
+  margin-bottom: 18px;
+  color: var(--sf-gold-bright);
+  font-size: 18px;
+}
+
+.detail-main {
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.dragon-seal {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 1px solid rgba(216, 168, 74, 0.24);
+  display: grid;
+  place-items: center;
+  color: var(--sf-gold);
+  font-size: 28px;
+  font-family: Georgia, "Times New Roman", serif;
+  background: radial-gradient(circle, rgba(216, 168, 74, 0.14), transparent 72%);
+}
+
+.detail-main h3 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.2;
+  color: var(--sf-gold-bright);
+}
+
+.detail-block {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(216, 168, 74, 0.18);
+}
+
+.detail-block h4 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: var(--sf-gold-bright);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-block h4::before,
+.detail-block h4::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(216, 168, 74, 0.28), transparent);
+}
+
+.detail-block h4::after {
+  background: linear-gradient(90deg, transparent, rgba(216, 168, 74, 0.28));
+}
+
+.detail-text {
+  color: var(--sf-ink-soft);
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.detail-path {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-path div {
+  padding: 12px 14px;
+  border: 1px solid rgba(216, 168, 74, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 18, 24, 0.64);
+}
+
+.detail-path span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--sf-arcane);
+  font-size: 12px;
+}
+
+.detail-path strong {
+  color: var(--sf-ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.status-row {
+  display: grid;
+  gap: 18px;
+}
+
+.hp-head,
+.level-row {
+  justify-content: space-between;
+  color: var(--sf-gold-bright);
+  font-size: 18px;
+}
+
+.hp-head span:last-child,
+.level-row strong {
+  color: var(--sf-arcane);
+}
+
+.hp-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(111, 220, 255, 0.14);
   overflow: hidden;
-  margin-bottom: 6px;
+  border: 1px solid rgba(111, 220, 255, 0.24);
 }
 
 .hp-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4ade80, #22c55e);
-  border-radius: 4px;
-  transition: width 0.5s ease;
-}
-
-.status-num {
-  font-size: 14px;
-  font-weight: 700;
-  color: #4ade80;
-}
-
-.status-value-lg {
-  font-size: 24px;
-  font-weight: 800;
-  color: #f5b95b;
+  background: linear-gradient(90deg, #168db1, #4ed8ff);
+  box-shadow: 0 0 16px rgba(111, 220, 255, 0.32);
 }
 
 .enter-btn {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(245, 185, 91, 0.35) 0%, rgba(212, 154, 63, 0.25) 100%);
-  border: 2px solid #f5b95b;
-  border-radius: 12px;
-  color: #f5b95b;
-  font-size: 15px;
-  font-weight: 800;
+  min-height: 72px;
+  margin-top: 28px;
+  border-radius: 18px;
+  border: 1px solid var(--sf-border-strong);
+  background:
+    linear-gradient(180deg, rgba(255, 214, 143, 0.16), rgba(145, 95, 28, 0.26)),
+    rgba(12, 11, 8, 0.96);
+  color: var(--sf-gold-bright);
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 24px rgba(216, 168, 74, 0.18);
   cursor: pointer;
-  transition: all 0.3s ease;
 }
 
-.enter-btn:hover {
-  background: linear-gradient(135deg, rgba(245, 185, 91, 0.45) 0%, rgba(212, 154, 63, 0.35) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(245, 185, 91, 0.35);
+.detail-delete-btn {
+  width: 100%;
+  margin: 12px 0 0;
 }
 
-.enter-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.timeline-content {
-  position: relative;
-}
-
-.timeline-item {
-  display: flex;
-  gap: 12px;
-  padding-bottom: 20px;
-  position: relative;
-}
-
-.timeline-item:last-child {
-  padding-bottom: 0;
-}
-
-.timeline-item:last-child .timeline-line {
-  display: none;
-}
-
-.timeline-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #f5b95b;
-  flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(245, 185, 91, 0.5);
-}
-
-.timeline-line {
-  position: absolute;
-  left: 5px;
-  top: 14px;
-  width: 2px;
-  height: calc(100% - 14px);
-  background: linear-gradient(180deg, rgba(245, 185, 91, 0.5) 0%, rgba(245, 185, 91, 0.1) 100%);
-}
-
-.timeline-info {
-  flex: 1;
-}
-
-.timeline-event {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 4px;
-}
-
-.timeline-date {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-@media (max-width: 1200px) {
-  .archive-content {
-    flex-direction: column;
+@media (max-width: 1320px) {
+  .content-grid {
+    grid-template-columns: 1fr;
   }
-  
-  .archive-list {
-    flex: 1;
-  }
-  
-  .archive-detail {
-    flex: 1;
-  }
-  
-  .cards-grid {
-    justify-content: center;
+
+  .archive-grid {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 980px) {
+  .page-shell {
+    padding: 14px 16px 24px;
+  }
+
   .navbar {
-    padding: 0 16px;
+    grid-template-columns: 1fr;
+    height: auto;
+    padding-bottom: 18px;
   }
-  
-  .nav-menu {
-    display: none;
-  }
-  
-  .banner-title {
-    font-size: 32px;
-    letter-spacing: 16px;
-  }
-  
-  .search-section {
-    position: static;
-    justify-content: center;
-    margin-top: 20px;
-  }
-  
-  .archive-content {
-    padding: 24px 16px;
-  }
-  
-  .archive-card {
-    width: 100%;
-  }
-}
 
-@media (max-width: 480px) {
-  .banner-title {
-    font-size: 28px;
-    letter-spacing: 12px;
+  .nav-links,
+  .user-box {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h2 {
+    font-size: 58px;
+  }
+
+  .hero p {
+    margin-left: 0;
+  }
+
+  .hero-tools {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    width: 100%;
   }
 }
 </style>

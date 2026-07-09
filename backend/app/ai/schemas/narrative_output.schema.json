@@ -39,6 +39,20 @@
         "new_facts": { "type": "array" }
       }
     },
-    "next_options": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+    "next_options": { "type": "array", "items": { "type": "string" }, "maxItems": 5 },
+    "ending": {
+      "type": ["object", "null"],
+      "properties": {
+        "should_end": { "type": "boolean" },
+        "title": { "type": "string" },
+        "ending_type": { "enum": ["good", "normal", "bad", "open"] },
+        "rating": { "type": "string" },
+        "status": { "type": "string" },
+        "summary": { "type": "string" },
+        "key_nodes": { "type": "array", "items": { "type": "string" } },
+        "rewards": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
   }
 }

@@ -10,7 +10,7 @@ import sys
 from sqlalchemy import Index, inspect, text
 
 from backend.app.core.config import settings
-from backend.app.services.auth_service import hash_password
+from backend.app.services.auth_service import hash_password, is_password_hash
 from backend.app.db.database import Base, SessionLocal, engine
 from backend.app.models import models  # noqa: F401  确保所有模型注册到 Base.metadata
 
@@ -58,6 +58,8 @@ def _ensure_legacy_columns() -> None:
         statements.append("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
     if "status" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active'")
+    if "is_temporary" not in user_columns:
+        statements.append("ALTER TABLE users ADD COLUMN is_temporary INTEGER NOT NULL DEFAULT 0")
 
     if "worlds" in table_names:
         world_columns = {column["name"] for column in inspector.get_columns("worlds")}
@@ -88,16 +90,21 @@ def _ensure_legacy_columns() -> None:
 
 
 def _ensure_demo_user(db) -> None:
-    if db.get(models.User, DEMO_USER_ID) is not None:
+    demo = db.get(models.User, DEMO_USER_ID)
+    if demo is not None:
+        if not is_password_hash(demo.password_hash):
+            demo.password_hash = hash_password("demo")
+        demo.is_temporary = 0
         return
     db.add(
         models.User(
             id=DEMO_USER_ID,
             username=f"demo_user_{DEMO_USER_ID}",
-            password_hash="demo",
+            password_hash=hash_password("demo"),
             nickname="Demo User",
             role="user",
             status="active",
+            is_temporary=0,
         )
     )
 
@@ -112,16 +119,48 @@ def _ensure_admin_user(db) -> None:
                 nickname="管理员",
                 role="admin",
                 status="active",
+                is_temporary=0,
             )
         )
         return
 
     admin.role = "admin"
+    admin.is_temporary = 0
     if getattr(admin, "status", None) != "active":
         admin.status = "active"
 
 
+def _ensure_unique_builtin_admin_user(db) -> None:
+    admin = db.query(models.User).filter(models.User.username == settings.ADMIN_USERNAME).first()
+    if admin is None:
+        admin = models.User(
+            username=settings.ADMIN_USERNAME,
+            password_hash=hash_password(settings.ADMIN_PASSWORD),
+            nickname="Admin_Root",
+            role="admin",
+            status="active",
+            is_temporary=0,
+        )
+        db.add(admin)
+    else:
+        admin.role = "admin"
+        admin.status = "active"
+        admin.is_temporary = 0
+        admin.nickname = "Admin_Root"
+        admin.password_hash = hash_password(settings.ADMIN_PASSWORD)
+
+    other_admins = (
+        db.query(models.User)
+        .filter(models.User.role == "admin", models.User.username != settings.ADMIN_USERNAME)
+        .all()
+    )
+    for user in other_admins:
+        user.role = "user"
+
+
 def init_db(drop_first: bool = False) -> None:
+    from backend.app.models import chapter, story, worldbuilding  # noqa: F401
+
     if drop_first:
         Base.metadata.drop_all(bind=engine)
         print("已删除所有旧表")
@@ -129,7 +168,7 @@ def init_db(drop_first: bool = False) -> None:
     _ensure_legacy_columns()
     with SessionLocal() as db:
         _ensure_demo_user(db)
-        _ensure_admin_user(db)
+        _ensure_unique_builtin_admin_user(db)
         db.commit()
     tables = sorted(Base.metadata.tables.keys())
     print(f"建表完成({len(tables)} 张): {', '.join(tables)}")

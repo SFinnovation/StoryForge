@@ -49,6 +49,17 @@ class RoomRepo(BaseRepo):
             .first()
         )
 
+    def find_by_owner_title(self, owner_id: int, title: str) -> Room | None:
+        normalized = title.strip().lower()
+        return (
+            self.db.query(Room)
+            .filter(
+                Room.owner_id == owner_id,
+                func.lower(Room.title) == normalized,
+            )
+            .first()
+        )
+
     def list_for_user(self, user_id: int) -> list[Room]:
         """用户参与的所有房间（作为成员）。"""
         return (

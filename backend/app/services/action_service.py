@@ -170,6 +170,7 @@ async def run_action_pipeline(
             new_clues=new_clues,
             task_updates=[t.model_dump() for t in story.narrative.state_updates.task_updates],
             next_options=story.narrative.next_options,
+            ending=story.narrative.ending.model_dump() if story.narrative.ending else None,
         ),
         session_meta=SessionMetaDTO(
             current_scene=meta["current_scene"],

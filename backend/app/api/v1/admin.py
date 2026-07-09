@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, status
@@ -8,7 +8,19 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.app.api.deps import get_current_admin_user, get_db_session
 from backend.app.core.exceptions import StoryForgeError
-from backend.app.models.models import AdminOperationLog, GameSession, Message, Report, User, World, WorldModule
+from backend.app.models.models import (
+    AdminOperationLog,
+    GameSession,
+    Message,
+    Report,
+    Room,
+    RoomAction,
+    RoomMember,
+    RoomMessage,
+    User,
+    World,
+    WorldModule,
+)
 from backend.app.schemas.api_response import success
 from backend.app.services.auth_service import hash_password
 
@@ -81,10 +93,16 @@ def _module_payload(module: WorldModule) -> dict:
     }
 
 
-def _world_payload(world: World, *, include_disabled_modules: bool = False) -> dict:
+def _world_payload(
+    world: World,
+    *,
+    include_disabled_modules: bool = False,
+    stats: dict[int, dict] | None = None,
+) -> dict:
     modules = list(world.modules or [])
     if not include_disabled_modules:
         modules = [module for module in modules if module.is_enabled]
+    world_stats = (stats or {}).get(world.id, {})
     return {
         "id": world.id,
         "name": world.name,
@@ -98,6 +116,11 @@ def _world_payload(world: World, *, include_disabled_modules: bool = False) -> d
         "is_public": bool(world.is_public),
         "is_enabled": bool(world.is_enabled),
         "created_at": world.created_at,
+        "active_room_count": world_stats.get("active_room_count", 0),
+        "room_count": world_stats.get("room_count", 0),
+        "session_count": world_stats.get("session_count", 0),
+        "active_session_count": world_stats.get("active_session_count", 0),
+        "message_count": world_stats.get("message_count", 0),
         "modules": [_module_payload(module) for module in modules],
     }
 
@@ -108,9 +131,9 @@ def _user_payload(user: User) -> dict:
         "username": user.username,
         "nickname": user.nickname,
         "email": user.email,
-        "password_hash": user.password_hash,
         "role": user.role,
         "status": user.status,
+        "is_temporary": bool(getattr(user, "is_temporary", 0)),
         "avatar_url": user.avatar_url,
         "created_at": user.created_at,
     }
@@ -159,20 +182,113 @@ def _session_payload(session: GameSession, *, include_messages: bool = False) ->
     return data
 
 
+def _world_stats_map(db: Session) -> dict[int, dict]:
+    stats: dict[int, dict] = {}
+
+    def item(world_id: int | None) -> dict:
+        if world_id is None:
+            return {}
+        return stats.setdefault(
+            world_id,
+            {
+                "active_room_count": 0,
+                "room_count": 0,
+                "session_count": 0,
+                "active_session_count": 0,
+                "message_count": 0,
+            },
+        )
+
+    for world_id, count in db.query(Room.world_id, func.count(Room.id)).group_by(Room.world_id).all():
+        item(world_id)["room_count"] = count or 0
+
+    for world_id, count in (
+        db.query(Room.world_id, func.count(Room.id))
+        .filter(Room.status.in_(("waiting", "playing", "paused")))
+        .group_by(Room.world_id)
+        .all()
+    ):
+        item(world_id)["active_room_count"] = count or 0
+
+    for world_id, count in db.query(GameSession.world_id, func.count(GameSession.id)).group_by(GameSession.world_id).all():
+        item(world_id)["session_count"] = count or 0
+
+    for world_id, count in (
+        db.query(GameSession.world_id, func.count(GameSession.id))
+        .filter(GameSession.status == "playing")
+        .group_by(GameSession.world_id)
+        .all()
+    ):
+        item(world_id)["active_session_count"] = count or 0
+
+    for world_id, count in (
+        db.query(GameSession.world_id, func.count(Message.id))
+        .join(Message, Message.session_id == GameSession.id)
+        .group_by(GameSession.world_id)
+        .all()
+    ):
+        item(world_id)["message_count"] = count or 0
+
+    return stats
+
+
 @router.get("/summary")
 def get_admin_summary(
     db: Session = Depends(get_db_session),
     admin: User = Depends(get_current_admin_user),
 ):
+    today_start = datetime.combine(datetime.utcnow().date(), time.min)
+    active_room_statuses = ("waiting", "playing", "paused")
+    world_stats = _world_stats_map(db)
+    worlds = db.query(World).filter(World.is_enabled == 1).all()
+    world_activity = sorted(
+        [
+            {
+                "id": world.id,
+                "name": world.name,
+                "type": world.type,
+                "active_room_count": world_stats.get(world.id, {}).get("active_room_count", 0),
+                "room_count": world_stats.get(world.id, {}).get("room_count", 0),
+                "session_count": world_stats.get(world.id, {}).get("session_count", 0),
+                "active_session_count": world_stats.get(world.id, {}).get("active_session_count", 0),
+                "message_count": world_stats.get(world.id, {}).get("message_count", 0),
+            }
+            for world in worlds
+        ],
+        key=lambda item: (
+            item["active_room_count"],
+            item["active_session_count"],
+            item["session_count"],
+            item["message_count"],
+        ),
+        reverse=True,
+    )
+
     return success(
         {
             "users": db.query(func.count(User.id)).scalar() or 0,
             "banned_users": db.query(func.count(User.id)).filter(User.status == "banned").scalar() or 0,
+            "temporary_users": db.query(func.count(User.id)).filter(User.is_temporary == 1).scalar() or 0,
             "worlds": db.query(func.count(World.id)).filter(World.is_enabled == 1).scalar() or 0,
+            "disabled_worlds": db.query(func.count(World.id)).filter(World.is_enabled == 0).scalar() or 0,
             "modules": db.query(func.count(WorldModule.id)).filter(WorldModule.is_enabled == 1).scalar() or 0,
+            "disabled_modules": db.query(func.count(WorldModule.id)).filter(WorldModule.is_enabled == 0).scalar() or 0,
             "sessions": db.query(func.count(GameSession.id)).scalar() or 0,
             "active_sessions": db.query(func.count(GameSession.id)).filter(GameSession.status == "playing").scalar() or 0,
+            "today_sessions": (
+                db.query(func.count(GameSession.id)).filter(GameSession.started_at >= today_start).scalar() or 0
+            ),
             "reports": db.query(func.count(Report.id)).scalar() or 0,
+            "rooms": db.query(func.count(Room.id)).scalar() or 0,
+            "active_rooms": (
+                db.query(func.count(Room.id)).filter(Room.status.in_(active_room_statuses)).scalar() or 0
+            ),
+            "room_members": db.query(func.count(RoomMember.id)).scalar() or 0,
+            "room_messages": db.query(func.count(RoomMessage.id)).scalar() or 0,
+            "session_messages": db.query(func.count(Message.id)).scalar() or 0,
+            "pending_actions": db.query(func.count(RoomAction.id)).filter(RoomAction.status == "pending").scalar() or 0,
+            "database_status": "ok",
+            "world_activity": world_activity[:10],
         }
     )
 
@@ -183,11 +299,14 @@ def list_admin_worlds(
     db: Session = Depends(get_db_session),
     admin: User = Depends(get_current_admin_user),
 ):
+    stats = _world_stats_map(db)
     query = db.query(World).options(joinedload(World.modules)).order_by(World.id.desc())
     if not include_disabled:
         query = query.filter(World.is_enabled == 1)
     worlds = query.all()
-    return success({"items": [_world_payload(world, include_disabled_modules=include_disabled) for world in worlds]})
+    return success(
+        {"items": [_world_payload(world, include_disabled_modules=include_disabled, stats=stats) for world in worlds]}
+    )
 
 
 @router.post("/worlds", status_code=status.HTTP_201_CREATED)
@@ -261,6 +380,30 @@ def delete_admin_world(
     return success({"id": world.id, "is_enabled": False}, message="world deleted")
 
 
+@router.post("/worlds/{world_id}/enable")
+def enable_admin_world(
+    world_id: int,
+    db: Session = Depends(get_db_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    world = db.get(World, world_id)
+    if world is None:
+        raise StoryForgeError("world not found", status_code=404)
+
+    world.is_enabled = 1
+    _write_log(
+        db,
+        admin,
+        action="enable_world",
+        target_type="world",
+        target_id=world.id,
+        description=f"admin {admin.id} enabled world {world.name}",
+    )
+    db.commit()
+    db.refresh(world)
+    return success(_world_payload(world), message="world enabled")
+
+
 @router.post("/worlds/{world_id}/modules", status_code=status.HTTP_201_CREATED)
 def create_admin_module(
     world_id: int,
@@ -300,6 +443,30 @@ def create_admin_module(
     db.commit()
     db.refresh(module)
     return success(_module_payload(module), message="module created")
+
+
+@router.post("/modules/{module_id}/enable")
+def enable_admin_module(
+    module_id: int,
+    db: Session = Depends(get_db_session),
+    admin: User = Depends(get_current_admin_user),
+):
+    module = db.get(WorldModule, module_id)
+    if module is None:
+        raise StoryForgeError("module not found", status_code=404)
+
+    module.is_enabled = 1
+    _write_log(
+        db,
+        admin,
+        action="enable_module",
+        target_type="module",
+        target_id=module.id,
+        description=f"admin {admin.id} enabled module {module.name}",
+    )
+    db.commit()
+    db.refresh(module)
+    return success(_module_payload(module), message="module enabled")
 
 
 @router.delete("/modules/{module_id}")

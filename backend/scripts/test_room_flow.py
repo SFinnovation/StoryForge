@@ -33,6 +33,7 @@ from backend.app.schemas.room_schema import (
     RoomCreateRequest,
     RoomJoinRequest,
 )
+from backend.app.services.auth_service import hash_password
 from backend.app.services import (
     chat_service,
     guidance_service,
@@ -44,8 +45,8 @@ from backend.app.services import (
 
 def _seed() -> tuple[int, int, int, int]:
     with SessionLocal() as db:
-        host = User(username="host_alice", password_hash="demo", nickname="爱丽丝", role="user")
-        guest = User(username="guest_bob", password_hash="demo", nickname="鲍勃", role="user")
+        host = User(username="host_alice", password_hash=hash_password("demo"), nickname="爱丽丝", role="user")
+        guest = User(username="guest_bob", password_hash=hash_password("demo"), nickname="鲍勃", role="user")
         db.add_all([host, guest])
         db.flush()
 
@@ -113,6 +114,7 @@ async def main() -> int:
         )
         print(f"== 玩家加入 is_new={is_new} member_user={member.user_id} ==")
         assert is_new and rid == room_id
+        room_member_service.set_character(db, room_id, guest_id, guest_char_id)
 
         detail = room_service.get_room_detail(db, room_id, host_id)
         assert len(detail.members) == 2

@@ -7,6 +7,7 @@
 4. 不得直接透露 hidden_truth 或未解锁的关键真相
 5. NPC 只能说出其 knowledge_scope 内的信息
 6. 只输出 JSON，无 markdown 或解释
+7. 当主目标已经完成、角色全灭、玩家明确放弃/逃离且故事无法继续、或当前模组达到明确终局时，必须设置 ending.should_end=true；否则保持 false 或省略 ending
 
 输入：
 - 世界观风格：{{world_style}}
@@ -41,5 +42,16 @@ clue_pressure 行为：
     "task_updates": [{"title":"","status":"todo|doing|done|failed"}],
     "new_facts": []
   },
-  "next_options": ["选项1","选项2","选项3"]
+  "next_options": ["选项1","选项2","选项3"],
+  "ending": {
+    "should_end": false,
+    "title": "结局标题",
+    "ending_type": "good|normal|bad|open",
+    "rating": "A|B|C|D|S",
+    "status": "主目标达成/勉强生还/任务失败/开放结局",
+    "summary": "本局结局摘要",
+    "key_nodes": ["关键节点1","关键节点2","关键节点3"],
+    "rewards": ["关键收获1","关键收获2"],
+    "tags": ["幸存","主目标达成"]
+  }
 }

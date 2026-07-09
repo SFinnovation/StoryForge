@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import secrets
 import string
+import json
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -25,8 +26,10 @@ from backend.app.schemas.room_schema import (
     RoomDTO,
     RoomMemberDTO,
 )
+from backend.app.schemas.character import CharacterResponse
 from backend.app.services.ai_service import get_ai_service
 from backend.app.services.context_builder import build_for_opening
+from backend.app.services.progress_service import room_progress_stats
 from backend.app.services.state_committer import commit_opening
 from backend.app.services.websocket_manager import connection_manager
 from backend.app.services.world_seed import seed_session_world_data
@@ -45,7 +48,8 @@ def _generate_room_code(db: Session) -> str:
 # ---------------- DTO 转换 ----------------
 
 
-def room_dto(room: Room) -> RoomDTO:
+def room_dto(room: Room, db: Session | None = None) -> RoomDTO:
+    progress = room_progress_stats(db, room) if db is not None else {}
     return RoomDTO(
         id=room.id,
         room_code=room.room_code,
@@ -58,6 +62,45 @@ def room_dto(room: Room) -> RoomDTO:
         status=room.status,
         max_players=room.max_players,
         created_at=room.created_at,
+        **progress,
+    )
+
+
+def _character_dto(character: Character | None) -> CharacterResponse | None:
+    if character is None:
+        return None
+    try:
+        skills = json.loads(character.skills_json or "{}")
+    except json.JSONDecodeError:
+        skills = {}
+    try:
+        saving_throws = json.loads(character.saving_throws_json or "[]")
+    except json.JSONDecodeError:
+        saving_throws = []
+    return CharacterResponse(
+        id=character.id,
+        name=character.name,
+        profession=character.class_id,
+        class_id=character.class_id,
+        race_id=character.race_id,
+        background_id=character.background_id,
+        motivation=character.motivation,
+        level=character.level,
+        exp=character.exp,
+        hit_dice=character.hit_dice,
+        proficiency_bonus=character.proficiency_bonus,
+        hp=character.hp,
+        max_hp=character.max_hp,
+        attributes={
+            "strength": character.strength,
+            "dexterity": character.dexterity,
+            "constitution": character.constitution,
+            "intelligence": character.intelligence,
+            "wisdom": character.wisdom,
+            "charisma": character.charisma,
+        },
+        skills=skills,
+        saving_throws=saving_throws,
     )
 
 
@@ -68,6 +111,7 @@ def member_dto(member: RoomMember) -> RoomMemberDTO:
         user_id=member.user_id,
         character_id=member.character_id,
         character_name=character.name if character else None,
+        character=_character_dto(character),
         role=member.role,
         display_name=member.display_name or (user.nickname or user.username if user else None),
         online_status=member.online_status,
@@ -84,7 +128,7 @@ def detail_dto(db: Session, room: Room) -> RoomDetailDTO:
         if m.user_id in online:
             dto.online_status = "online"
         dtos.append(dto)
-    return RoomDetailDTO(room=room_dto(room), members=dtos)
+    return RoomDetailDTO(room=room_dto(room, db), members=dtos)
 
 
 # ---------------- 查询与校验 ----------------
@@ -112,11 +156,11 @@ def require_owner(db: Session, room_id: int, user_id: int) -> Room:
 
 
 def list_my_rooms(db: Session, user_id: int) -> list[RoomDTO]:
-    return [room_dto(r) for r in RoomRepo(db).list_for_user(user_id)]
+    return [room_dto(r, db) for r in RoomRepo(db).list_for_user(user_id)]
 
 
 def list_public_rooms(db: Session) -> list[RoomDTO]:
-    return [room_dto(r) for r in RoomRepo(db).list_public()]
+    return [room_dto(r, db) for r in RoomRepo(db).list_public()]
 
 
 # ---------------- 建房 ----------------
@@ -127,11 +171,18 @@ def create_room(db: Session, user_id: int, payload: RoomCreateRequest) -> RoomDe
     if world is None or not world.is_enabled:
         raise StoryForgeError("world not found", status_code=404)
     user = db.get(User, user_id)
+    title = payload.title.strip()
+    if not title:
+        raise StoryForgeError("请输入自定义房间名", status_code=422)
+
+    repo = RoomRepo(db)
+    if repo.find_by_owner_title(user_id, title) is not None:
+        raise StoryForgeError("该房间名称已存在，请先在档案馆删除旧记录后再使用", status_code=409)
 
     try:
-        room = RoomRepo(db).create(
+        room = repo.create(
             room_code=_generate_room_code(db),
-            title=payload.title,
+            title=title,
             world_id=payload.world_id,
             owner_id=user_id,
             description=payload.description,

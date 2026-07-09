@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
@@ -40,7 +45,7 @@ class Settings(BaseSettings):
     AKP_BUNDLE_PRESET: str = "standard"          # bundle 输出预算：quick | standard
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(BASE_DIR / ".env"), str(BASE_DIR / "backend" / ".env")),
         env_file_encoding="utf-8",
         extra="ignore",
     )

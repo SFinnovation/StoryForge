@@ -1,21 +1,22 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { charactersApi, roomsApi, sessionsApi, worldsApi } from './api/client'
+import AppNavbar from './components/AppNavbar.vue'
 import systemBackground from '../背景/系统主界面.png'
 import productIcon from '../图标/产品图标.png'
 
-const emit = defineEmits(['navigate', 'session-created', 'logout', 'back-button-hidden'])
+const emit = defineEmits(['navigate', 'session-created', 'logout', 'back-button-hidden', 'open-settings'])
 
 const props = defineProps({
   currentPage: {
     type: String,
     default: '角色'
   },
-  worldview: {
+  currentUser: {
     type: Object,
     default: null
   },
-  currentUser: {
+  worldview: {
     type: Object,
     default: null
   }
@@ -33,6 +34,7 @@ const nameInputRef = ref(null)
 
 const worldviewTitle = computed(() => props.worldview?.title || props.worldview?.name || '')
 const roomSettings = computed(() => props.worldview?.roomSettings || {})
+const roomJoinTarget = computed(() => props.worldview?.roomJoin || null)
 const moduleTitle = computed(() => props.worldview?.selectedModule?.name || props.worldview?.recommendedModule || '追捕克伦可 Krenko\'s Way')
 const isCocSystem = computed(() => worldviewTitle.value.includes('COC'))
 
@@ -653,11 +655,31 @@ const handleCreateCharacter = async () => {
 
   isSubmitting.value = true
   try {
+    const requestedRoomName = (roomSettings.value.roomName || '').trim()
+    if (Object.prototype.hasOwnProperty.call(roomSettings.value, 'roomName') && !requestedRoomName) {
+      createStatus.value = '需要输入自定义房间名。'
+      return
+    }
+
     const character = await charactersApi.create(createCharacterPayload())
+    if (roomJoinTarget.value?.roomId) {
+      const roomId = Number(roomJoinTarget.value.roomId)
+      await roomsApi.setCharacter(roomId, character.id)
+      const roomDetail = await roomsApi.get(roomId)
+      createStatus.value = '角色已创建，正在进入房间。'
+      clearDraft()
+      emit('session-created', {
+        ...roomDetail,
+        character,
+        roomId
+      })
+      return
+    }
+
     const worldId = await resolveWorldId()
-    if (roomSettings.value.roomName) {
+    if (requestedRoomName) {
       const roomDetail = await roomsApi.create({
-        title: roomSettings.value.roomName,
+        title: requestedRoomName,
         world_id: worldId,
         visibility: roomSettings.value.roomType === 'public' ? 'public' : 'private',
         max_players: Number(roomSettings.value.maxPlayers) || 4
@@ -677,7 +699,7 @@ const handleCreateCharacter = async () => {
     const sessionData = await sessionsApi.start({
       world_id: worldId,
       character_id: character.id,
-      title: roomSettings.value.roomName,
+      title: requestedRoomName || undefined,
       difficulty: roomSettings.value.difficulty || 'normal'
     })
 
@@ -706,32 +728,11 @@ const handleCreateCharacter = async () => {
       <div class="texture"></div>
     </div>
 
-    <nav class="navbar">
-      <div class="nav-placeholder"></div>
-      <div class="nav-logo">
-        <img class="logo-icon" :src="productIcon" alt="StoryForge 产品图标" />
-        <div class="logo-text">
-          <span class="logo-en">StoryForge</span>
-          <span class="logo-cn">灵境档案</span>
-        </div>
-      </div>
-      <div class="nav-user">
-        <div class="user-chip">
-          <div class="user-avatar">夜</div>
-          <div class="user-info">
-            <span class="user-name">{{ props.currentUser?.nickname || props.currentUser?.username || '游客' }}</span>
-            <span class="user-level">Lv.12</span>
-          </div>
-        </div>
-        <button class="nav-icon" aria-label="退出登录" @click="emit('logout')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M10 17l5-5-5-5" />
-            <path d="M15 12H3" />
-            <path d="M21 3v18h-8" />
-          </svg>
-        </button>
-      </div>
-    </nav>
+    <AppNavbar
+      :current-user="props.currentUser"
+      @open-settings="emit('open-settings')"
+      @logout="emit('logout')"
+    />
 
     <main class="creator-shell">
       <aside class="left-panel">
@@ -1997,6 +1998,105 @@ const handleCreateCharacter = async () => {
   .selection-grid,
   .skills-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1281px) and (max-width: 1500px) {
+  .center-panel {
+    --center-compact-scale: 0.96;
+    width: calc(98% / var(--center-compact-scale));
+    justify-self: center;
+    transform: scale(var(--center-compact-scale));
+    transform-origin: top center;
+  }
+
+  .center-content {
+    padding: 24px;
+  }
+
+  .stage {
+    gap: 18px;
+  }
+
+  .section-header h2 {
+    font-size: 23px;
+  }
+
+  .selection-grid {
+    gap: 18px;
+  }
+
+  .selection-col {
+    min-height: 520px;
+    gap: 18px;
+    padding: 32px 18px 28px;
+  }
+
+  .col-header strong {
+    font-size: 25px;
+  }
+
+  .col-header span {
+    font-size: 14px;
+  }
+
+  .col-header span::before,
+  .col-header span::after {
+    width: 28px;
+    margin: 0 8px 4px;
+  }
+
+  .current-selection {
+    min-height: 180px;
+  }
+
+  .current-selection strong {
+    font-size: 31px;
+  }
+
+  .current-selection span {
+    font-size: 18px;
+  }
+
+  .choice-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 10px;
+  }
+
+  .selection-options {
+    gap: 10px;
+  }
+
+  .option-btn {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 5px;
+    min-height: 68px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+
+  .option-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .option-copy {
+    justify-items: center;
+  }
+
+  .option-copy span {
+    width: 100%;
+    font-size: 14px;
+  }
+
+  .option-copy small {
+    font-size: 12px;
+  }
+
+  .center-footer {
+    padding: 14px 24px 22px;
   }
 }
 

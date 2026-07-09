@@ -1,80 +1,56 @@
 # 快速开始
 
-## 2026-07-08 补充说明
-
-后端启动时会自动确保开发管理员账号存在，默认值来自 `.env`：
-
-```env
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
-```
-
-管理员后端接口文档见 [admin-backend.md](admin-backend.md)。管理员接口统一挂载在 `/api/v1/admin`，需要先通过 `/api/v1/auth/login` 获取管理员 Bearer token。
-
-建议额外运行管理员接口验证：
-
-```powershell
-.venv\Scripts\python.exe -m backend.scripts.test_admin_api
-```
-
-本文档说明如何在本地准备并运行 StoryForge。当前后端主闭环已实现，前端仍是静态原型，联调层待补齐。
+> 更新日期：2026-07-09  
+> 本文说明如何在本地准备、运行和验证 StoryForge。
 
 ## 前置要求
 
 - Git 2.30+
-- Python 3.11+（后端）
-- Node.js 20+ 与 npm（前端）
+- Python 3.11+
+- Node.js 20+ 与 npm
 
-Windows 用户建议优先使用 `python`、`pip`、`npm.cmd` 这类可执行命令。若 PowerShell 拦截 `npm.ps1`，可改用：
+Windows PowerShell 如果拦截 `npm.ps1`，请使用：
 
 ```powershell
 npm.cmd install
 npm.cmd run dev
 ```
 
-## 克隆仓库
+## 环境变量
 
-```bash
-git clone https://github.com/AOC2334/StoryForge.git
-cd StoryForge
-```
-
-## 环境配置
-
-复制根目录环境变量模板：
-
-```bash
-cp .env.example .env
-```
-
-PowerShell：
+当前仓库根目录已经有本地 `.env`，如果需要重新生成，可从后端模板复制到根目录：
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item backend\.env.example .env
 ```
 
-本地开发时可保持 `LLM_API_KEY` 为空，AI 模块会走 mock/fallback 响应，便于无密钥跑通闭环。接入真实模型时填写：
+常用配置：
 
 ```env
+DATABASE_URL=sqlite:///./storyforge.db
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
 LLM_API_BASE=https://api.deepseek.com/v1
-LLM_API_KEY=your-api-key
+LLM_API_KEY=
 LLM_MODEL=deepseek-chat
 ```
 
-## 后端安装与运行
+`LLM_API_KEY` 可以留空。留空时后端使用 fallback 生成开局、行动叙事和 DM 建议，适合现场演示。
+
+## 启动后端
 
 从仓库根目录执行：
 
-```bash
+```powershell
 pip install -r backend/requirements.txt
 uvicorn backend.app.main:app --reload --port 8000
 ```
 
-后端启动时会调用 `init_db()` 自动建表。默认 SQLite 文件为 `storyforge.db`；如果使用 `.env.example` 中的 `DATABASE_URL=sqlite:///./data/storyforge.db`，请确保 `data/` 目录存在。
+后端启动时会执行 `init_db()`，自动建表、补列并确保开发管理员账号存在。
 
 验证：
 
-```bash
+```powershell
 curl http://localhost:8000/health
 ```
 
@@ -83,68 +59,121 @@ curl http://localhost:8000/health
 - http://localhost:8000/health
 - http://localhost:8000/docs
 
-## 前端安装与运行
+## 启动前端
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-浏览器访问：http://localhost:5173
+访问：
 
-注意：当前 `package.json` 与 `package-lock.json` 版本不完全同步，`npm ci` 可能失败；在修复 lockfile 前请使用 `npm install`。
+- http://localhost:5173
+
+`frontend/vite.config.js` 会把 `/api` 代理到后端开发服务，前端默认 `API_BASE_URL=/api/v1`。
+
+## 默认账号与角色
+
+管理员：
+
+```text
+username: admin
+password: admin123
+```
+
+普通用户可以在登录页注册，也可以使用游客进入。管理员登录后会自动进入后台，普通用户进入玩家大厅。
+
+## 推荐演示流程
+
+1. 启动后端和前端。
+2. 用两个普通账号分别登录两个浏览器窗口。
+3. 每个账号创建或选择一个角色。
+4. A 创建房间，人数设置为 2。
+5. B 输入房间码加入。
+6. 两人绑定角色并准备。
+7. 房主开局，观察 AI DM 开场广播。
+8. 玩家发送群聊与场外消息。
+9. 玩家提交行动，观察 `ai.thinking`、骰点动画、AI 旁白。
+10. 玩家向 DM 提问，观察私密建议。
+11. 用管理员账号登录，查看统计卡、世界活跃图表、用户与会话管理。
 
 ## 验证脚本
 
-后端提供多组脚本，建议在安装依赖后从仓库根目录运行：
+后端服务层多人房间验证：
 
-```bash
-python -m backend.scripts.test_ai_module
-python -m backend.scripts.verify_implementation_spec
-python -m backend.scripts.verify_ai_db_interaction
-python -m backend.scripts.test_action_api
-python -m backend.scripts.test_frontend_contract
-python -m backend.scripts.bench_ai_module
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.test_room_flow
+```
+
+多人 HTTP + WebSocket 端到端验证，可自动拉起服务：
+
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.e2e_multiplayer_api --spawn-server
+```
+
+管理员接口验证：
+
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.test_admin_api
+```
+
+前端契约验证：
+
+```powershell
+.venv\Scripts\python.exe -m backend.scripts.test_frontend_contract
 ```
 
 静态检查：
 
-```bash
-python -m compileall -q backend/app backend/scripts scripts
-python -m json.tool rules/dnd5e/core.json
-python -m json.tool rules/dnd5e/skills.json
+```powershell
+.venv\Scripts\python.exe -m compileall -q backend/app backend/scripts scripts
+.venv\Scripts\python.exe -m json.tool rules/dnd5e/core.json
+.venv\Scripts\python.exe -m json.tool rules/dnd5e/skills.json
+```
+
+前端构建：
+
+```powershell
+cd frontend
+npm.cmd run build
 ```
 
 ## 常见问题
 
-### `python` 命令不存在
+### 管理员登录后看不到玩家大厅
 
-安装 Python 并勾选 Add Python to PATH，或使用本机已有解释器的完整路径运行。
+这是预期行为。管理员会被 `App.vue` 分流到 `AdminPage.vue`，用于展示角色差异与后台管理。
 
-### PowerShell 禁止运行 `npm.ps1`
+### 房主点击开始失败
 
-改用 `npm.cmd`：
+当前房间开局要求：
 
-```powershell
-npm.cmd install
-npm.cmd run build
-```
+- 房间状态为 `waiting`
+- 房间人数达到 `max_players`
+- 全员已绑定角色
+- 全员已准备
+- 当前用户是房主
 
-### `npm ci` 提示 lockfile 不同步
+演示时建议将房间人数设置为实际测试账号数量。
 
-当前前端依赖锁文件与 `package.json` 存在版本不一致。临时开发使用 `npm install`；正式修复时需要更新并提交 `frontend/package-lock.json`。
+### WebSocket 连接失败
 
-### 行尾符差异导致大量 diff
+确认：
 
-仓库通过 `.gitattributes` 统一使用 LF。Windows 用户建议：
+- 后端运行在 `localhost:8000`
+- 前端通过 Vite 代理访问 `/api/v1`
+- 当前用户已经是房间成员
+- 浏览器控制台没有 token 过期或 403 错误
 
-```bash
-git config core.autocrlf input
-```
+### AI 响应慢或失败
 
-## 下一步
+现场演示可留空 `LLM_API_KEY` 使用 fallback，避免外部网络影响。接入真实模型时再配置 `LLM_API_BASE`、`LLM_API_KEY`、`LLM_MODEL`。
 
-- 阅读 [架构设计](architecture.md) 了解模块边界
-- 阅读 [模块检查报告](module-audit.md) 查看当前风险
-- 阅读 [实现规格书](implementation-spec.md) 对齐目标态需求
+## 下一步阅读
+
+- [架构设计](architecture.md)
+- [前端结构与交互逻辑](frontend-structure.md)
+- [管理员后台说明](admin-backend.md)
+- [模块检查报告](module-audit.md)
+- [答辩 PPT 生成指导](defense-ppt-generation-guide.md)

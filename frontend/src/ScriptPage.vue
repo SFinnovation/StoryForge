@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { worldsApi } from './api/client'
+import AppNavbar from './components/AppNavbar.vue'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
 import goblinCover from '../游戏种类/哥布林.jpg'
@@ -8,20 +9,21 @@ import dndCover from '../游戏种类/龙与地下城.jpg'
 import cocCover from '../游戏种类/克苏鲁.jpg'
 import customCover from '../游戏种类/世界观.jpg'
 
-const emit = defineEmits(['navigate', 'session-created', 'logout', 'back-button-hidden'])
+const emit = defineEmits(['navigate', 'session-created', 'logout', 'back-button-hidden', 'open-settings'])
 
 const props = defineProps({
   currentPage: {
     type: String,
     default: '世界观'
+  },
+  currentUser: {
+    type: Object,
+    default: null
   }
 })
 
 const searchKeyword = ref('')
-const activeNav = ref(props.currentPage)
 const selectedWorldview = ref(0)
-
-const navItems = []
 
 const fallbackWorldviews = [
   {
@@ -189,11 +191,6 @@ const filteredWorldviews = computed(() => {
 
 const selectedModules = computed(() => selectedData.value.modules || [])
 
-const handleNavigate = (page) => {
-  activeNav.value = page
-  emit('navigate', page)
-}
-
 const selectWorldview = (worldviewId) => {
   const index = worldviews.value.findIndex((item) => item.id === worldviewId)
   if (index >= 0) {
@@ -218,7 +215,7 @@ const currentRoomSettings = () => ({
 const openRoomSetup = (target) => {
   pendingRoomTarget.value = target
   roomSetupStatus.value = ''
-  roomSetupForm.roomName = `${target?.selectedModule?.name || target?.title || '新冒险'}团`
+  roomSetupForm.roomName = ''
   roomSetupForm.inviteCode = ''
   roomSetupForm.maxPlayers = 4
   roomSetupForm.roomType = 'public'
@@ -245,7 +242,7 @@ const handleRoomSetupSubmit = () => {
 
   const settings = currentRoomSettings()
   if (!settings.roomName) {
-    roomSetupStatus.value = '请填写房间名称。'
+    roomSetupStatus.value = '需要输入自定义房间名。'
     return
   }
 
@@ -293,50 +290,11 @@ onMounted(async () => {
       <div class="bg-grid"></div>
     </div>
 
-    <nav class="navbar">
-      <div class="nav-logo">
-        <img class="logo-icon" :src="productIcon" alt="StoryForge 产品图标" />
-        <div class="logo-text">
-          <span class="logo-en">StoryForge</span>
-          <span class="logo-cn">灵境档案</span>
-        </div>
-      </div>
-
-      <div class="nav-menu">
-        <button
-          v-for="item in navItems"
-          :key="item"
-          class="nav-item"
-          :class="{ active: activeNav === item }"
-          @click="handleNavigate(item)"
-        >
-          {{ item }}
-        </button>
-      </div>
-
-      <div class="nav-user">
-        <div class="user-chip">
-          <div class="user-avatar">夜</div>
-          <div class="user-info">
-            <span class="user-name">夜行者</span>
-            <span class="user-level">Lv.12</span>
-          </div>
-        </div>
-        <button class="nav-icon" aria-label="消息">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M4 6h16v12H4z" />
-            <path d="m4 7 8 6 8-6" />
-          </svg>
-        </button>
-        <button class="nav-icon" aria-label="退出登录" @click="emit('logout')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-            <path d="M10 17l5-5-5-5" />
-            <path d="M15 12H3" />
-            <path d="M21 3v18h-8" />
-          </svg>
-        </button>
-      </div>
-    </nav>
+    <AppNavbar
+      :current-user="props.currentUser"
+      @open-settings="emit('open-settings')"
+      @logout="emit('logout')"
+    />
 
     <main class="worldview-shell">
       <section class="top-stage">
@@ -495,8 +453,7 @@ onMounted(async () => {
                 v-model="roomSetupForm.roomName"
                 type="text"
                 class="form-input"
-                placeholder="请输入房间名称"
-                required
+                placeholder="请输入自定义房间名"
               />
             </div>
           </div>

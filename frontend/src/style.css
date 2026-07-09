@@ -12,6 +12,10 @@ html, body {
   font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
 }
 
+body.settings-modal-open {
+  overflow: hidden;
+}
+
 #app {
   width: 100%;
   min-height: 100%;

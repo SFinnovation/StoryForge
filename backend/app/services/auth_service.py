@@ -18,6 +18,8 @@ from backend.app.core.config import settings
 from backend.app.core.exceptions import StoryForgeError
 
 PASSWORD_PREFIX = "pbkdf2_sha256"
+PASSWORD_ITERATIONS = 260_000
+LEGACY_PASSWORD_ITERATIONS = 120_000
 
 
 @dataclass
@@ -38,20 +40,67 @@ def _b64decode(raw: str) -> bytes:
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000)
-    return f"{PASSWORD_PREFIX}${salt}${digest.hex()}"
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_ITERATIONS,
+    )
+    return f"{PASSWORD_PREFIX}${PASSWORD_ITERATIONS}${salt}${digest.hex()}"
+
+
+def is_password_hash(stored_hash: str | None) -> bool:
+    if not stored_hash:
+        return False
+    parts = stored_hash.split("$")
+    return len(parts) in (3, 4) and parts[0] == PASSWORD_PREFIX
+
+
+def is_legacy_plaintext_password(stored_hash: str | None) -> bool:
+    return bool(stored_hash) and not is_password_hash(stored_hash)
+
+
+def verify_legacy_plaintext_password(password: str, stored_hash: str | None) -> bool:
+    if not is_legacy_plaintext_password(stored_hash):
+        return False
+    return hmac.compare_digest(password, stored_hash or "")
+
+
+def needs_password_rehash(stored_hash: str | None) -> bool:
+    if not is_password_hash(stored_hash):
+        return True
+    parts = (stored_hash or "").split("$")
+    if len(parts) == 3:
+        return True
+    try:
+        iterations = int(parts[1])
+    except (TypeError, ValueError):
+        return True
+    return iterations < PASSWORD_ITERATIONS
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    if stored_hash == password:
-        return True
-    try:
-        prefix, salt, expected = stored_hash.split("$", 2)
-    except ValueError:
+    parts = stored_hash.split("$")
+    if len(parts) == 3:
+        prefix, salt, expected = parts
+        iterations = LEGACY_PASSWORD_ITERATIONS
+    elif len(parts) == 4:
+        prefix, iterations_raw, salt, expected = parts
+        try:
+            iterations = int(iterations_raw)
+        except ValueError:
+            return False
+    else:
         return False
+
     if prefix != PASSWORD_PREFIX:
         return False
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 120_000)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations,
+    )
     return hmac.compare_digest(digest.hex(), expected)
 
 

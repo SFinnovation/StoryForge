@@ -197,6 +197,12 @@ async def _dispatch(
                     websocket, make_event("error", room_id, {"message": exc.message})
                 )
                 return
+            except Exception as exc:
+                await connection_manager.send(
+                    websocket,
+                    make_event("error", room_id, {"message": f"action failed: {exc}"}),
+                )
+                return
         for event in result["events"]:
             await connection_manager.broadcast(room_id, event)
         return
@@ -219,6 +225,12 @@ async def _dispatch(
             except StoryForgeError as exc:
                 await connection_manager.send(
                     websocket, make_event("error", room_id, {"message": exc.message})
+                )
+                return
+            except Exception as exc:
+                await connection_manager.send(
+                    websocket,
+                    make_event("error", room_id, {"message": f"dm ask failed: {exc}"}),
                 )
                 return
         await guidance_service.dispatch_dm_ask_events(room_id, user_id, result)

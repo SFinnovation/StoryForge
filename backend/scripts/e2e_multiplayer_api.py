@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
-"""多人房间 E2E：HTTP + WebSocket 外部接入测试（模拟前端 client.js / wsClient.js）
+"""Multiplayer E2E test for StoryForge.
 
-用法（PowerShell，项目根目录）：
-    python backend/scripts/e2e_multiplayer_api.py --spawn-server
+This script covers:
+1. LAN-style user registration / room join
+2. OpeningAgent pulling world + module + rulebook context from DB
+3. Opening narration persistence + WS broadcast
+4. A player action that goes through parse -> check -> narrative -> critic -> commit
+5. Frontend-facing room message flow and DB persistence checks
 
-可选参数：
-    --base-url http://127.0.0.1:8765   # 已有服务时
-    --spawn-server                      # 自动起 uvicorn + 独立 sqlite
-    --port 8765
-    --keep-server                       # 测试后不杀进程
-    --verbose
-
-测试方案详见：docs/testing-multiplayer-e2e.md
+Usage:
+    python backend/scripts/e2e_multiplayer_api.py --spawn-server --live-ai
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,28 +25,27 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
-try:
-    import websockets
-except ImportError:
-    websockets = None  # type: ignore
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.app.ai.services.fallbacks import mock_module_extract, mock_rulebook_extract
+from backend.app.core.config import settings
+
+try:
+    import websockets
+except ImportError:  # pragma: no cover - optional dependency in some envs
+    websockets = None  # type: ignore
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
-
-
-# ---------------------------------------------------------------------------
-# 结果收集
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -77,23 +75,18 @@ class SuiteResult:
         return sum(1 for r in self.results if not r.ok)
 
     def print_report(self) -> None:
-        print("\n" + "=" * 60)
-        print("E2E 测试报告")
-        print("=" * 60)
+        print("\n" + "=" * 72)
+        print("StoryForge multiplayer E2E report")
+        print("=" * 72)
         for r in self.results:
             mark = "PASS" if r.ok else "FAIL"
             line = f"[{mark}] {r.case_id} {r.name}"
             if r.detail:
-                line += f" — {r.detail}"
+                line += f" | {r.detail}"
             print(line)
-        print("-" * 60)
-        print(f"合计: {self.passed} 通过, {self.failed} 失败 / {len(self.results)} 项")
-        print("=" * 60)
-
-
-# ---------------------------------------------------------------------------
-# HTTP 客户端（模拟 frontend/src/api/client.js）
-# ---------------------------------------------------------------------------
+        print("-" * 72)
+        print(f"Total: {self.passed} passed, {self.failed} failed / {len(self.results)} cases")
+        print("=" * 72)
 
 
 class HttpClient:
@@ -109,10 +102,10 @@ class HttpClient:
         await self._client.aclose()
 
     def _headers(self) -> dict[str, str]:
-        h = {"Accept": "application/json"}
+        headers = {"Accept": "application/json"}
         if self.token:
-            h["Authorization"] = f"Bearer {self.token}"
-        return h
+            headers["Authorization"] = f"Bearer {self.token}"
+        return headers
 
     async def request(
         self,
@@ -124,7 +117,7 @@ class HttpClient:
         auth: bool = True,
     ) -> tuple[int, Any]:
         headers = self._headers() if auth else {"Accept": "application/json"}
-        r = await self._client.request(
+        response = await self._client.request(
             method,
             f"{self.base}{path}",
             headers=headers,
@@ -132,10 +125,10 @@ class HttpClient:
             params=params,
         )
         try:
-            body = r.json() if r.content else None
+            body = response.json() if response.content else None
         except json.JSONDecodeError:
-            body = r.text
-        return r.status_code, body
+            body = response.text
+        return response.status_code, body
 
     async def api(
         self,
@@ -168,11 +161,6 @@ class HttpClient:
         return await self.api("GET", "/api/v1/auth/me")
 
 
-# ---------------------------------------------------------------------------
-# WebSocket 客户端（模拟 frontend/src/api/wsClient.js）
-# ---------------------------------------------------------------------------
-
-
 class WsCollector:
     def __init__(self, base_http: str, room_id: int, token: str):
         self.ws_url = (
@@ -185,9 +173,8 @@ class WsCollector:
 
     async def connect(self, wait_snapshot: bool = True) -> None:
         if websockets is None:
-            raise RuntimeError("需要安装 websockets：pip install websockets")
+            raise RuntimeError("websockets is required: pip install websockets")
         self._ws = await websockets.connect(self.ws_url, open_timeout=15)
-        # 首包同步读取，避免 snapshot 在后台 task 启动前丢失
         first = await asyncio.wait_for(self._ws.recv(), timeout=15)
         self.events.append(json.loads(first))
         self._task = asyncio.create_task(self._reader())
@@ -219,7 +206,7 @@ class WsCollector:
                 if ev.get("type") == event_type:
                     return ev
             await asyncio.sleep(0.05)
-        raise TimeoutError(f"等待事件 {event_type} 超时")
+        raise TimeoutError(f"timeout waiting for event {event_type}")
 
     def count(self, event_type: str) -> int:
         return sum(1 for e in self.events if e.get("type") == event_type)
@@ -242,45 +229,81 @@ def new_client_msg_id() -> str:
     return f"e2e_{uuid.uuid4().hex[:12]}"
 
 
-# ---------------------------------------------------------------------------
-# 服务启动 / 数据库种子
-# ---------------------------------------------------------------------------
-
-
 def _prepare_database(db_path: Path) -> int:
-    """初始化测试库并写入一个可用世界，返回 world_id。"""
+    """Create an isolated SQLite DB, seed one world, one rulebook pack and one adventure module."""
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
     os.environ.setdefault("SEED_DEMO_DATA", "false")
 
     from backend.app.db.database import SessionLocal
     from backend.app.db.init_db import init_db
     from backend.app.models.models import World
+    from backend.app.services.content_pack_repository import (
+        link_module_to_world,
+        link_rulebook_to_world,
+        save_adventure_module,
+        save_rulebook_pack,
+    )
 
     init_db(drop_first=True)
     with SessionLocal() as db:
         world = World(
-            name="E2E 测试世界",
-            type="fantasy",
-            description="端到端测试用世界",
-            opening_prompt="Open a short test scene.",
+            name="黑鸦古堡",
+            type="mystery",
+            description="端到端测试用世界：古堡悬疑与调查线索。",
+            opening_prompt="请用中文生成一个简短而有张力的开局。",
             rule_style="lite_dnd",
             difficulty="normal",
             is_enabled=1,
             created_by=None,
         )
         db.add(world)
+        db.flush()
+
+        rulebook_output = mock_rulebook_extract(SimpleNamespace(source_name="黑鸦古堡规则书.docx"))
+        rulebook = save_rulebook_pack(
+            db,
+            rulebook_output,
+            source_filename="黑鸦古堡规则书.docx",
+            knowledge_pack_dir=None,
+        )
+        link_rulebook_to_world(db, world.id, rulebook.id)
+
+        module_output = mock_module_extract(SimpleNamespace(source_name="黑鸦古堡模组.docx"))
+        module = save_adventure_module(
+            db,
+            module_output,
+            source_filename="黑鸦古堡模组.docx",
+            knowledge_pack_dir=None,
+        )
+        link_module_to_world(db, world.id, module.id)
+
         db.commit()
         db.refresh(world)
         return world.id
 
 
-def _spawn_server(port: int, db_path: Path) -> subprocess.Popen:
+def _spawn_server(port: int, db_path: Path, *, live_ai: bool) -> subprocess.Popen:
     env = os.environ.copy()
     env["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
-    env["LLM_API_KEY"] = ""
     env["AKP_ENABLED"] = "false"
     env["SEED_DEMO_DATA"] = "false"
     env["DB_AUTO_CREATE"] = "true"
+    if live_ai:
+        if not settings.LLM_API_KEY.strip():
+            raise RuntimeError("LLM_API_KEY is empty, cannot start --live-ai mode")
+        env["LLM_API_BASE"] = settings.LLM_API_BASE
+        env["LLM_API_KEY"] = settings.LLM_API_KEY
+        env["LLM_MODEL"] = settings.LLM_MODEL
+        env["LLM_TIMEOUT"] = str(settings.LLM_TIMEOUT)
+        env["LLM_MAX_TOKENS"] = str(settings.LLM_MAX_TOKENS)
+        env["LLM_TEMPERATURE"] = str(settings.LLM_TEMPERATURE)
+        env["AI_ENABLE_CRITIC"] = "true" if settings.AI_ENABLE_CRITIC else "false"
+        env["AI_FALLBACK_ON_CRITIC_FAIL"] = "true" if settings.AI_FALLBACK_ON_CRITIC_FAIL else "false"
+        env["AI_MAX_REVISIONS"] = str(settings.AI_MAX_REVISIONS)
+        env["AI_CRITIC_PASS_SCORE"] = str(settings.AI_CRITIC_PASS_SCORE)
+    else:
+        env["LLM_API_KEY"] = ""
+
     cmd = [
         sys.executable,
         "-m",
@@ -305,41 +328,65 @@ async def _wait_health(base_url: str, timeout: float = 30.0) -> None:
     async with httpx.AsyncClient() as client:
         while time.time() < deadline:
             try:
-                r = await client.get(f"{base_url}/health", timeout=2.0)
-                if r.status_code == 200:
+                response = await client.get(f"{base_url}/health", timeout=2.0)
+                if response.status_code == 200:
                     return
             except Exception:
                 pass
             await asyncio.sleep(0.3)
-    raise RuntimeError(f"服务未在 {timeout}s 内就绪: {base_url}/health")
+    raise RuntimeError(f"server not ready within {timeout}s: {base_url}/health")
 
 
-# ---------------------------------------------------------------------------
-# 主测试流程
-# ---------------------------------------------------------------------------
+def _assert_opening_context(db_path: Path, world_id: int, character_id: int) -> None:
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
+
+    from backend.app.db.database import SessionLocal
+    from backend.app.models.models import Character, World
+    from backend.app.services.content_ingestion_service import load_world_content_context
+    from backend.app.services.context_builder import build_for_opening
+
+    with SessionLocal() as db:
+        world = db.get(World, world_id)
+        character = db.get(Character, character_id)
+        assert world is not None
+        assert character is not None
+        assert world.rulebook_pack_id is not None
+        assert world.adventure_module_id is not None
+
+        pack_ctx = load_world_content_context(db, world)
+        assert pack_ctx["rulebook"] is not None
+        assert pack_ctx["module"] is not None
+        assert len(pack_ctx["public_world_facts"]) >= 2
+        assert len(pack_ctx["seed_npcs"]) >= 1
+
+        opening_input = build_for_opening(db, world, character)
+        assert opening_input.public_world_facts
+        assert opening_input.seed_npcs
 
 
 async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Path | None = None) -> None:
     host = HttpClient(base_url, suite, "host")
     guest = HttpClient(base_url, suite, "guest")
+    ws_host: WsCollector | None = None
+    ws_guest: WsCollector | None = None
     suffix = uuid.uuid4().hex[:8]
 
     try:
-        # --- Phase A: 鉴权与角色 ---
+        # Auth
         await host.register(f"e2e_host_{suffix}")
-        suite.ok("T-AUTH-01", "Host 注册")
-        h_me = await host.me()
-        assert h_me["username"].startswith("e2e_host_")
-        suite.ok("T-AUTH-02", "Host /auth/me")
+        suite.ok("T-AUTH-01", "host register")
+        assert (await host.me())["username"].startswith("e2e_host_")
+        suite.ok("T-AUTH-02", "host /me")
 
         await guest.register(f"e2e_guest_{suffix}")
-        suite.ok("T-AUTH-01", "Guest 注册")
+        suite.ok("T-AUTH-03", "guest register")
 
         worlds = await host.api("GET", "/api/v1/worlds", auth=False)
         assert len(worlds) >= 1
         world_id = worlds[0]["id"]
-        suite.ok("T-WORLD-01", f"GET /worlds ({len(worlds)} 个)")
+        suite.ok("T-WORLD-01", f"world list count={len(worlds)}")
 
+        # Characters
         char_payload = {
             "name": f"HostChar_{suffix}",
             "race_id": "human",
@@ -362,18 +409,18 @@ async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Pat
             "/api/v1/characters",
             json_body={**char_payload, "name": f"GuestChar_{suffix}"},
         )
-        suite.ok("T-CHAR-01", "创建角色 x2")
+        suite.ok("T-CHAR-01", "create 2 characters")
 
         chars = await host.api("GET", "/api/v1/characters")
         assert any(c["id"] == host_char["id"] for c in chars)
-        suite.ok("T-CHAR-02", "GET /characters")
+        suite.ok("T-CHAR-02", "list characters")
 
-        # --- Phase B: 房间 REST 生命周期 ---
+        # Room create/join
         detail = await host.api(
             "POST",
             "/api/v1/rooms",
             json_body={
-                "title": f"E2E团_{suffix}",
+                "title": f"E2E房间{suffix}",
                 "world_id": world_id,
                 "visibility": "public",
                 "max_players": 2,
@@ -382,15 +429,15 @@ async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Pat
         room = detail["room"]
         room_id = room["id"]
         room_code = room["room_code"]
-        suite.ok("T-ROOM-01", f"POST /rooms id={room_id} code={room_code}")
+        suite.ok("T-ROOM-01", f"create room id={room_id} code={room_code}")
 
         mine = await host.api("GET", "/api/v1/rooms", params={"scope": "mine"})
         assert any(r["id"] == room_id for r in mine)
-        suite.ok("T-ROOM-02", "GET /rooms?scope=mine")
+        suite.ok("T-ROOM-02", "mine rooms")
 
         public = await guest.api("GET", "/api/v1/rooms", params={"scope": "public"})
         assert any(r["id"] == room_id for r in public)
-        suite.ok("T-ROOM-03", "GET /rooms?scope=public")
+        suite.ok("T-ROOM-03", "public rooms")
 
         joined = await guest.api(
             "POST",
@@ -398,11 +445,11 @@ async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Pat
             json_body={"room_code": room_code, "character_id": guest_char["id"]},
         )
         assert joined["room"]["id"] == room_id
-        suite.ok("T-ROOM-04", "POST /rooms/join")
+        suite.ok("T-ROOM-04", "guest join")
 
-        rd = await host.api("GET", f"/api/v1/rooms/{room_id}")
-        assert len(rd["members"]) == 2
-        suite.ok("T-ROOM-05", "GET /rooms/{id}")
+        room_detail = await host.api("GET", f"/api/v1/rooms/{room_id}")
+        assert len(room_detail["members"]) == 2
+        suite.ok("T-ROOM-05", "room detail")
 
         await host.api(
             "POST",
@@ -414,207 +461,285 @@ async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Pat
             f"/api/v1/rooms/{room_id}/character",
             json_body={"character_id": guest_char["id"]},
         )
-        suite.ok("T-ROOM-06", "POST /rooms/{id}/character")
+        suite.ok("T-ROOM-06", "bind characters")
 
         await host.api("POST", f"/api/v1/rooms/{room_id}/ready", json_body={"is_ready": True})
         await guest.api("POST", f"/api/v1/rooms/{room_id}/ready", json_body={"is_ready": True})
-        suite.ok("T-ROOM-07", "POST /rooms/{id}/ready")
+        suite.ok("T-ROOM-07", "ready both players")
 
-        started = await host.api(
-            "POST",
-            f"/api/v1/rooms/{room_id}/start",
-            json_body={"character_id": host_char["id"]},
-        )
-        assert started["detail"]["room"]["status"] == "playing"
-        session_id = started["session_id"]
-        suite.ok("T-ROOM-08", f"POST /rooms/{{id}}/start session={session_id}")
+        if db_path is not None:
+            _assert_opening_context(db_path, room["world_id"], host_char["id"])
+            suite.ok("T-DB-CTX", "opening context reads world+rulebook+module from DB")
 
-        # --- Phase C: WebSocket 双客户端 ---
+        # Connect WS before starting game so we can see the opening broadcast.
         ws_host = WsCollector(base_url, room_id, host.token)
         ws_guest = WsCollector(base_url, room_id, guest.token)
         await ws_host.connect()
         await ws_guest.connect()
-        suite.ok("T-WS-01", "双客户端 WS 连接 + 鉴权")
-        suite.ok("T-WS-02", "room.snapshot x2")
+        suite.ok("T-WS-01", "ws connected")
+        suite.ok("T-WS-02", "room snapshot received")
 
-        # chat via WS
+        # Start game / opening
+        start_result = await host.api(
+            "POST",
+            f"/api/v1/rooms/{room_id}/start",
+            json_body={"character_id": host_char["id"]},
+        )
+        assert start_result["detail"]["room"]["status"] == "playing"
+        assert start_result["session_id"]
+        assert start_result["opening_message"]["content"]
+        suite.ok("T-ROOM-08", f"start game session={start_result['session_id']}")
+        suite.ok("T-ROOM-08b", "opening message returned")
+
+        await ws_host.wait_type("game.started", timeout=15)
+        await ws_guest.wait_type("game.started", timeout=15)
+        await ws_host.wait_type("dm.narration", timeout=15)
+        await ws_guest.wait_type("dm.narration", timeout=15)
+        suite.ok("T-WS-03", "opening broadcast reached both clients")
+
+        # Chat / OOC sanity
         cid_chat = new_client_msg_id()
-        await ws_guest.send("chat.send", {"content": "大家好，准备行动！", "client_msg_id": cid_chat})
-        await asyncio.sleep(1.0)
+        await ws_guest.send("chat.send", {"content": "大家好，准备行动。", "client_msg_id": cid_chat})
+        await asyncio.sleep(0.8)
         if ws_host.has_type("chat.message") and ws_guest.has_type("chat.message"):
-            suite.ok("T-WS-03", "chat.send")
-            suite.ok("T-WS-04", "chat.message 广播")
+            suite.ok("T-WS-04", "chat broadcast")
         else:
-            suite.fail("T-WS-04", "chat.message 广播", f"host={ws_host.count('chat.message')} guest={ws_guest.count('chat.message')}")
+            suite.fail(
+                "T-WS-04",
+                "chat broadcast",
+                f"host={ws_host.count('chat.message')} guest={ws_guest.count('chat.message')}",
+            )
 
-        # ooc via WS
-        await ws_host.send("ooc.send", {"content": "（场外）这关很难", "client_msg_id": new_client_msg_id()})
+        await ws_host.send("ooc.send", {"content": "（场外）这关很难。", "client_msg_id": new_client_msg_id()})
         await asyncio.sleep(0.8)
         if ws_host.has_type("ooc.message") and ws_guest.has_type("ooc.message"):
-            suite.ok("T-WS-05", "ooc.send")
-            suite.ok("T-WS-06", "ooc.message 广播")
+            suite.ok("T-WS-05", "ooc broadcast")
         else:
-            suite.fail("T-WS-06", "ooc.message 广播", "未收到")
+            suite.fail("T-WS-05", "ooc broadcast", "missing ooc.message")
 
-        # typing
         await ws_guest.send("typing.start", {})
         await asyncio.sleep(0.5)
         if ws_host.has_type("typing.start") and not ws_guest.has_type("typing.start"):
-            suite.ok("T-WS-07", "typing.start（排除发送者）")
+            suite.ok("T-WS-06", "typing broadcast excludes sender")
         else:
-            suite.fail("T-WS-07", "typing.start", f"host={ws_host.count('typing.start')}")
+            suite.fail("T-WS-06", "typing broadcast", f"host={ws_host.count('typing.start')}")
 
-        # ping
         await ws_host.send("ping", {})
         await asyncio.sleep(0.3)
-        suite.ok("T-WS-12", "ping/pong")
+        suite.ok("T-WS-07", "ping/pong")
 
-        # action via WS
+        # Player action -> parse -> check -> narrative -> critic -> commit
         before_seq = max((e.get("seq") or 0) for e in ws_host.events)
-        act_cid = new_client_msg_id()
-        await ws_host.send("action.submit", {"action_text": "我观察四周寻找线索。", "client_msg_id": act_cid})
-        deadline = time.time() + 90
-        while time.time() < deadline:
-            if ws_host.has_type("dm.narration") or ws_host.has_type("ai.narration"):
-                break
-            await asyncio.sleep(0.2)
-        if ws_host.has_type("action.accepted") or ws_host.has_type("action.received"):
-            suite.ok("T-WS-08", "action.submit")
-        else:
-            suite.fail("T-WS-08", "action.submit", "无 action 回执")
-        if ws_host.has_type("dm.narration") or ws_host.has_type("ai.narration"):
-            suite.ok("T-WS-09", "行动叙事链路 dm.narration/ai.narration")
-        else:
-            suite.fail("T-WS-09", "行动叙事链路", f"events={[e.get('type') for e in ws_host.events[-8:]]}")
+        action_text = "我轻手轻脚地试图撬开钟摆后方的暗门，看看里面是否藏着机关。"
+        action_client_msg_id = new_client_msg_id()
+        action_resp = await host.api(
+            "POST",
+            f"/api/v1/rooms/{room_id}/action",
+            json_body={"action_text": action_text, "client_msg_id": action_client_msg_id},
+        )
+        action_data = action_resp["action_data"]
+        assert action_data is not None
+        suite.ok("T-ROOM-09", "action API returned payload")
 
-        # dm.ask privacy
+        if action_data.get("check") is not None:
+            suite.ok("T-ROOM-09b", "action triggered a dice check")
+        else:
+            suite.fail("T-ROOM-09b", "action triggered a dice check", "check is missing")
+
+        if action_data["meta"]["tokens_used"] > 0:
+            suite.ok("T-ROOM-09c", f"live AI tokens_used={action_data['meta']['tokens_used']}")
+        else:
+            suite.fail("T-ROOM-09c", "live AI tokens_used", "tokens_used=0")
+
+        if not action_data["ai_review"]["used_fallback"]:
+            suite.ok("T-ROOM-09d", "critic/narrative used live AI, not fallback")
+        else:
+            suite.fail("T-ROOM-09d", "critic/narrative used live AI", "used_fallback=true")
+
+        await ws_host.wait_type("action.accepted", timeout=15)
+        await ws_guest.wait_type("action.accepted", timeout=15)
+        await ws_host.wait_type("action.received", timeout=15)
+        await ws_guest.wait_type("action.received", timeout=15)
+
+        stages = {ev.get("data", {}).get("stage") for ev in ws_host.events if ev.get("type") == "ai.thinking"}
+        if {"parsing", "narrating"}.issubset(stages):
+            suite.ok("T-WS-08", "ai.thinking stages broadcast")
+        else:
+            suite.fail("T-WS-08", "ai.thinking stages", f"seen={sorted(x for x in stages if x)}")
+
+        if action_data.get("check") is not None:
+            await ws_host.wait_type("dice.result", timeout=20)
+            await ws_guest.wait_type("dice.result", timeout=20)
+            await ws_host.wait_type("dice.rolled", timeout=20)
+            await ws_guest.wait_type("dice.rolled", timeout=20)
+            suite.ok("T-WS-09", "dice broadcast")
+
+        await ws_host.wait_type("dm.narration", timeout=30)
+        await ws_guest.wait_type("dm.narration", timeout=30)
+        await ws_host.wait_type("state.updated", timeout=30)
+        await ws_guest.wait_type("state.updated", timeout=30)
+        suite.ok("T-WS-10", "narration/state updates broadcast")
+
+        # Leave room history queries after action.
         ws_guest.events.clear()
         ws_host.events.clear()
         ask_cid = new_client_msg_id()
-        await ws_guest.send("dm.ask", {"question": "我现在能做什么？", "client_msg_id": ask_cid, "visibility": "self"})
+        await ws_guest.send(
+            "dm.ask",
+            {"question": "我现在能做什么？", "client_msg_id": ask_cid, "visibility": "self"},
+        )
         await asyncio.sleep(8.0)
-        guest_guidance = ws_guest.has_type("dm.guidance")
-        host_guidance = ws_host.has_type("dm.guidance")
-        if guest_guidance and not host_guidance:
-            suite.ok("T-WS-10", "dm.ask")
-            suite.ok("T-WS-11", "dm.guidance 仅提问者")
+        if ws_guest.has_type("dm.guidance") and not ws_host.has_type("dm.guidance"):
+            suite.ok("T-WS-11", "dm.ask privacy")
         else:
-            suite.fail("T-WS-11", "dm.guidance 隐私", f"guest={guest_guidance} host={host_guidance}")
+            suite.fail(
+                "T-WS-11",
+                "dm.ask privacy",
+                f"guest={ws_guest.has_type('dm.guidance')} host={ws_host.has_type('dm.guidance')}",
+            )
 
+        after_seq = before_seq
         await ws_host.close()
         await ws_guest.close()
+        ws_host = None
+        ws_guest = None
 
-        # --- Phase D: REST 回退与分页 ---
+        # REST history / dedupe / privacy
         hist = await host.api("GET", f"/api/v1/rooms/{room_id}/messages", params={"limit": 200})
         assert len(hist) >= 1
         seqs = [m["seq"] for m in hist]
         assert seqs == sorted(seqs)
-        suite.ok("T-ROOM-09", f"GET /messages ({len(hist)} 条, seq 单调)")
+        suite.ok("T-ROOM-10", f"history count={len(hist)}")
 
         after = await guest.api(
             "GET",
             f"/api/v1/rooms/{room_id}/messages",
-            params={"after_seq": before_seq, "limit": 100},
+            params={"after_seq": after_seq, "limit": 100},
         )
-        assert all(m["seq"] > before_seq for m in after)
-        suite.ok("T-WS-13", f"after_seq 补消息 ({len(after)} 条)")
+        assert all(m["seq"] > after_seq for m in after)
+        suite.ok("T-ROOM-11", f"after_seq returned {len(after)} messages")
 
         rest_chat = await guest.api(
             "POST",
             f"/api/v1/rooms/{room_id}/chat",
-            json_body={"content": "REST 聊天回退", "client_msg_id": new_client_msg_id()},
+            json_body={"content": "REST chat fallback", "client_msg_id": new_client_msg_id()},
         )
         assert rest_chat["message_type"] == "chat"
-        suite.ok("T-ROOM-10", "POST /chat REST 回退")
+        suite.ok("T-ROOM-12", "REST chat")
 
         rest_ooc = await host.api(
             "POST",
             f"/api/v1/rooms/{room_id}/ooc",
-            json_body={"content": "REST OOC", "client_msg_id": new_client_msg_id()},
+            json_body={"content": "REST OOC fallback", "client_msg_id": new_client_msg_id()},
         )
         assert rest_ooc["message_type"] == "ooc"
-        suite.ok("T-ROOM-11", "POST /ooc REST 回退")
+        suite.ok("T-ROOM-13", "REST ooc")
 
         rest_ask = await guest.api(
             "POST",
             f"/api/v1/rooms/{room_id}/ask",
-            json_body={"question": "检定失败会怎样？", "client_msg_id": new_client_msg_id(), "visibility": "self"},
+            json_body={"question": "如果失败怎么办？", "client_msg_id": new_client_msg_id(), "visibility": "self"},
         )
         assert rest_ask.get("reply") is not None
-        suite.ok("T-ROOM-12", "POST /ask REST 回退")
+        suite.ok("T-ROOM-14", "REST ask")
 
-        # 幂等 action：复用 WS 阶段已提交的 client_msg_id
-        dup2 = await host.api(
+        dup = await host.api(
             "POST",
             f"/api/v1/rooms/{room_id}/action",
-            json_body={"action_text": "我观察四周寻找线索。", "client_msg_id": act_cid},
+            json_body={"action_text": action_text, "client_msg_id": action_client_msg_id},
         )
-        assert dup2.get("duplicate") is True
-        suite.ok("T-ROOM-13", "POST /action 幂等 client_msg_id")
+        assert dup.get("duplicate") is True
+        suite.ok("T-ROOM-15", "duplicate handling reachable")
 
-        # 隐私：host 历史看不到 guest 私密 guidance
         guest_hist = await guest.api("GET", f"/api/v1/rooms/{room_id}/messages", params={"limit": 200})
         host_hist = await host.api("GET", f"/api/v1/rooms/{room_id}/messages", params={"limit": 200})
         g_has = any(m["message_type"] == "guidance" for m in guest_hist)
         h_has = any(m["message_type"] == "guidance" for m in host_hist)
         if g_has and not h_has:
-            suite.ok("T-ROOM-09b", "dm.ask 历史隐私过滤")
+            suite.ok("T-ROOM-16", "guidance privacy in REST history")
         else:
-            suite.fail("T-ROOM-09b", "dm.ask 历史隐私过滤", f"guest={g_has} host={h_has}")
+            suite.fail("T-ROOM-16", "guidance privacy in REST history", f"guest={g_has} host={h_has}")
 
-        # --- Phase E: host 转让 + 结束 ---
+        # Host leave / room end
         leave_res = await host.api("POST", f"/api/v1/rooms/{room_id}/leave")
         assert leave_res.get("transferred_to_user_id") == guest.user["id"]
-        suite.ok("T-ROOM-14", f"host leave 转让 → user {guest.user['id']}")
+        suite.ok("T-ROOM-17", f"host left, transferred to user {guest.user['id']}")
 
-        rd2 = await guest.api("GET", f"/api/v1/rooms/{room_id}")
-        assert rd2["room"]["owner_id"] == guest.user["id"]
-        suite.ok("T-ROOM-14b", "转让后 owner_id 更新")
+        room_after_leave = await guest.api("GET", f"/api/v1/rooms/{room_id}")
+        assert room_after_leave["room"]["owner_id"] == guest.user["id"]
+        suite.ok("T-ROOM-18", "owner transferred")
 
         ended = await guest.api("POST", f"/api/v1/rooms/{room_id}/end")
         assert ended["room"]["status"] == "finished"
-        suite.ok("T-ROOM-15", "POST /rooms/{id}/end")
+        suite.ok("T-ROOM-19", "room ended")
 
-        # --- Phase F: 数据库断言 ---
+        # DB assertions
         if db_path is not None:
             os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
         from backend.app.db.database import SessionLocal
-        from backend.app.models.models import GameSession, Room, RoomAction, RoomMember, RoomMessage
+        from backend.app.models.models import GameSession, Message, Room, RoomAction, RoomMember, RoomMessage
 
         with SessionLocal() as db:
-            r = db.get(Room, room_id)
-            assert r is not None and r.status == "finished"
+            room_row = db.get(Room, room_id)
+            assert room_row is not None and room_row.status == "finished"
             members = db.query(RoomMember).filter(RoomMember.room_id == room_id).all()
-            assert len(members) == 1  # host 已离开
-            msgs = db.query(RoomMessage).filter(RoomMessage.room_id == room_id).count()
-            assert msgs >= 5
-            actions = db.query(RoomAction).filter(RoomAction.room_id == room_id, RoomAction.status == "done").count()
-            assert actions >= 1
-            sess = db.get(GameSession, session_id)
-            assert sess is not None and sess.mode == "multiplayer" and sess.room_id == room_id
-            types = {m.message_type for m in db.query(RoomMessage).filter(RoomMessage.room_id == room_id).all()}
-            for t in ("chat", "ooc", "narration"):
-                assert t in types, f"缺少 message_type={t}"
-        suite.ok("T-DB-01", f"数据库断言通过 (messages={msgs}, actions_done>={actions})")
+            assert len(members) == 1
+            session_row = db.get(GameSession, start_result["session_id"])
+            assert session_row is not None and session_row.mode == "multiplayer"
+            assert session_row.room_id == room_id
+
+            session_messages = (
+                db.query(Message)
+                .filter(Message.session_id == start_result["session_id"])
+                .order_by(Message.id)
+                .all()
+            )
+            narration_messages = [m for m in session_messages if m.message_type == "narration"]
+            assert len(narration_messages) >= 2
+            assert (narration_messages[0].tokens_used or 0) > 0
+            assert (narration_messages[1].tokens_used or 0) > 0
+
+            action_rows = db.query(RoomAction).filter(
+                RoomAction.room_id == room_id,
+                RoomAction.status == "done",
+            ).count()
+            assert action_rows >= 1
+
+            room_messages = db.query(RoomMessage).filter(RoomMessage.room_id == room_id).all()
+            room_types = {m.message_type for m in room_messages}
+            for required in ("chat", "ooc", "action", "dice", "narration"):
+                assert required in room_types, f"missing room message type: {required}"
+
+        suite.ok("T-DB-01", "database assertions passed")
 
         if verbose:
-            print(f"\n[verbose] room_id={room_id} session_id={session_id} message_types={sorted(types)}")
+            print(
+                f"\n[verbose] room_id={room_id} session_id={start_result['session_id']} "
+                f"action_tokens={action_data['meta']['tokens_used']} "
+                f"narration_tokens={narration_messages[0].tokens_used}"
+            )
 
     except Exception as exc:
-        suite.fail("T-FATAL", "未捕获异常", str(exc))
+        suite.fail("T-FATAL", "unhandled exception", str(exc))
         if verbose:
             import traceback
+
             traceback.print_exc()
     finally:
         await host.close()
         await guest.close()
+        if ws_host is not None:
+            await ws_host.close()
+        if ws_guest is not None:
+            await ws_guest.close()
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="多人房间 E2E API/WS 测试")
+    parser = argparse.ArgumentParser(description="StoryForge multiplayer E2E test")
     parser.add_argument("--base-url", default="http://127.0.0.1:8876")
     parser.add_argument("--port", type=int, default=8876)
-    parser.add_argument("--spawn-server", action="store_true", help="自动启动 uvicorn")
+    parser.add_argument("--spawn-server", action="store_true", help="start uvicorn automatically")
+    parser.add_argument("--live-ai", action="store_true", help="run against the real LLM provider")
     parser.add_argument("--keep-server", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
@@ -627,28 +752,28 @@ def main() -> int:
     server_proc: subprocess.Popen | None = None
     suite = SuiteResult()
 
-    print("=" * 60)
-    print("StoryForge 多人房间 E2E 测试")
-    print(f"目标: {base_url}")
-    print("方案: docs/testing-multiplayer-e2e.md")
-    print("=" * 60)
+    print("=" * 72)
+    print("StoryForge multiplayer E2E")
+    print(f"Target: {base_url}")
+    print(f"Mode: {'live AI' if args.live_ai else 'mock AI'}")
+    print("=" * 72)
 
     try:
         if args.spawn_server:
-            print(f"\n[setup] 初始化数据库 {db_path}")
+            print(f"[setup] creating database {db_path}")
             world_id = _prepare_database(db_path)
             print(f"[setup] world_id={world_id}")
-            print(f"[setup] 启动 uvicorn :{args.port} (LLM mock)")
-            server_proc = _spawn_server(args.port, db_path)
+            print(f"[setup] starting uvicorn on :{args.port}")
+            server_proc = _spawn_server(args.port, db_path, live_ai=args.live_ai)
             asyncio.run(_wait_health(base_url))
-            print("[setup] 服务就绪\n")
+            print("[setup] server ready\n")
 
         asyncio.run(run_e2e(base_url, suite, args.verbose, db_path if args.spawn_server else None))
     finally:
         if server_proc and suite.failed and server_proc.stderr:
             err_tail = server_proc.stderr.read().decode("utf-8", errors="replace")[-4000:]
             if err_tail.strip():
-                print("\n[server stderr 尾部]\n" + err_tail)
+                print("\n[server stderr]\n" + err_tail)
         if server_proc and not args.keep_server:
             if sys.platform == "win32":
                 server_proc.terminate()
@@ -658,7 +783,7 @@ def main() -> int:
                 server_proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 server_proc.kill()
-            print("\n[teardown] 测试服务已停止")
+            print("[teardown] server stopped")
 
     suite.print_report()
     return 0 if suite.failed == 0 else 1

@@ -6,39 +6,57 @@
 >
 > 设计原则：**不破坏现有单人 REST 闭环**，以 `GameSession + Message + action_service.handle_action + state_committer.commit_action` 为扩展锚点，新增 room / membership / realtime 层。
 
+## 2026-07-09 实现状态快照
+
+本文最初是多人实时跑团的扩展设计稿；当前仓库已经完成核心落地。答辩和当前开发请以下列事实为准：
+
+| 模块 | 当前实现 |
+|---|---|
+| 后端房间 REST | `backend/app/api/v1/rooms.py` 已实现建房、列表、加入、离开、准备、选角、开局、结束、历史消息、HTTP 回退聊天/行动/DM 提问。 |
+| WebSocket 实时通道 | `backend/app/api/v1/ws_rooms.py` 已支持 `chat.send`、`ooc.send`、`action.submit`、`dm.ask`、typing、ping。 |
+| 数据库 | `models.py` 已包含 `rooms`、`room_members`、`room_messages`、`room_actions`，`game_sessions` 已扩展 `room_id`、`mode`、`host_user_id`。 |
+| AI 多人行动 | `room_action_service.py` 已用房间级锁串行处理行动，并复用 `action_service.run_action_pipeline`。 |
+| DM 提问 | `guidance_service.py` 已实现 `visibility=self/room`，私密问答会在历史查询中按用户过滤。 |
+| 前端房间页 | `frontend/src/GameRoomPage.vue` 已接入真实 `roomsApi` 与 `RoomSocket`，包含成员、准备、开局、消息流、行动、DM 提问、骰点动画和右侧统计面板。 |
+| 管理后台联动 | `AdminPage.vue` 与 `/api/v1/admin/summary` 已统计房间、消息、行动、会话与世界活跃度。 |
+
+更适合作为当前状态入口的文档： [architecture.md](architecture.md)、[frontend-structure.md](frontend-structure.md)、[module-audit.md](module-audit.md)、[defense-ppt-generation-guide.md](defense-ppt-generation-guide.md)。
+
 ---
 
-## 0. 现状基线（扩展前必须对齐的事实）
+## 0. 当前实现基线
 
-以下为仓库**当前真实实现**，本设计的所有改动都以此为准，而非凭空假设。
+以下为 2026-07-09 仓库**当前真实实现**，答辩和后续开发以此为准。
 
 ### 0.1 后端
 
-| 维度 | 现状 |
+| 维度 | 当前实现 |
 |------|------|
-| 框架 | FastAPI，路由统一挂载 `/api/v1`，响应包装 `{code, message, data}`（`code==0` 成功） |
-| 会话模型 | `GameSession`（表 `game_sessions`）为 **1 用户 + 1 角色 + 1 世界 = 1 局**；**无** `room_id` / `mode` / `host_user_id` |
-| 行动闭环 | `POST /sessions/{id}/action` → `action_service.handle_action(db, session_id, user_id, action_text)` |
-| 落库通道 | `state_committer.commit_opening / commit_action`；`commit_action` 中玩家消息 `sender_name` **硬编码为 `"Player"`** |
-| 会话约束 | `session_service.start_session`：**每用户仅允许 1 个 `status=playing` 会话**；`get_playing_session` 仅校验 `session.user_id == user_id` |
-| 鉴权 | `deps.get_current_user_id`：无 `Authorization` 头回退 `DEMO_USER_ID=1`；Token 为**自定义格式**（`base64url(payload).hmac_sha256`，非标准 JWT 库），由 `auth_service` 签发/校验，payload 含 `sub`(user_id)/`username`/`exp` |
-| AI 编排 | `ai_service.get_ai_service()` 暴露 `generate_opening / parse_action / generate_narrative / generate_summary`；Critic↔Narrative 修订循环在 `ai/services/revision_loop.py` |
-| 上下文 | `context_builder.build_for_opening / build_for_action / build_for_summary`（只读 DB 组装，不调 LLM） |
-| 建表 | `db/init_db.py` 用 **ORM `Base.metadata.create_all`**（`schema.sql` 仅参考）；启动时 `init_db()` + `seed_demo_data()` |
-| 实时能力 | **无** WebSocket / SSE / socket.io；消息靠 `GET /sessions/{id}/messages` 轮询拉取 |
+| 框架 | FastAPI，路由统一挂载 `/api/v1`，响应包装 `{code, message, data}`（`code==0` 成功）。 |
+| 会话模型 | `GameSession` 已支持 `mode='single'/'multiplayer'`，多人局通过 `room_id`、`host_user_id` 关联房间。 |
+| 房间模型 | 已新增 `rooms`、`room_members`、`room_messages`、`room_actions`。 |
+| 行动闭环 | 单人使用 `/sessions/{id}/action`；多人使用 `/rooms/{id}/action` 或 WebSocket `action.submit`，二者复用 `action_service.run_action_pipeline`。 |
+| 落库通道 | `state_committer.commit_opening / commit_action` 写会话日志；`chat_service.persist_message` 镜像房间事件流。 |
+| 会话约束 | 单人会话保留每用户进行中约束；多人由房间 host 建局，成员通过 `room_members` 参与。 |
+| 鉴权 | REST 使用 Bearer token；无 token 时可回退 demo user；WebSocket 通过 `?token=` 校验并要求用户是房间成员。 |
+| AI 编排 | `ai_service` 暴露 Opening、ActionParser、Narrative、Summary、Guidance；Critic↔Narrative 修订循环仍在 `revision_loop.py`。 |
+| 上下文 | 单人使用 `context_builder`；多人额外使用 `room_context_builder` 为 Guidance/房间场景补充成员与可见信息。 |
+| 建表 | `db/init_db.py` 用 ORM `Base.metadata.create_all` 建表，并通过补列机制兼容旧 SQLite。 |
+| 实时能力 | 已实现 WebSocket `/api/v1/ws/rooms/{room_id}`，支持聊天、场外、行动、DM 提问、在线状态、typing 与心跳。 |
 
 ### 0.2 前端
 
-| 维度 | 现状 |
+| 维度 | 当前实现 |
 |------|------|
-| 技术栈 | Vue 3 `<script setup>` + Vite；**原生 fetch**；**无** Vue Router / Pinia / axios |
-| 路由 | `App.vue` 状态驱动：`currentPage ∈ {home, script, role, archive}`，动态 `<component>` |
-| API 层 | `src/api/client.js`：`apiRequest()` 封装，token 存 `localStorage.storyforge_access_token`，暴露 `authApi / worldsApi / charactersApi / sessionsApi` |
-| 加入房间 | `JoinRoomModal.vue` 为**纯 UI 弹窗**，加入逻辑在 `HomePage.handleJoinRoom`，真实路径依赖数字会话 ID 走 `sessionsApi.get` |
-| 跑团页 | **无真实游戏行动页**；`sessionsApi.action / messages` 已封装但**无页面调用**；`src/房间主页面.html` 是**静态四栏原型**（左角色 / 中聊天 / 右状态），可作为 `GameRoomPage.vue` 的 UI 蓝本 |
-| 实时能力 | **无** WebSocket 代码 |
+| 技术栈 | Vue 3 `<script setup>` + Vite；原生 fetch；浏览器 WebSocket；暂未引入 Vue Router / Pinia。 |
+| 路由 | `App.vue` 状态驱动：`home / script / role / room / ending / archive`，管理员用户直接渲染 `AdminPage`。 |
+| API 层 | `src/api/client.js` 已封装 `authApi / worldsApi / charactersApi / roomsApi / sessionsApi / adminApi`。 |
+| WebSocket 层 | `src/api/wsClient.js` 已实现 RoomSocket、自动重连、心跳、seq 去重和断线补消息回调。 |
+| 加入房间 | `JoinRoomModal.vue` 与 `GameRoomPage.vue` 已走真实 `roomsApi.join` 和房间码。 |
+| 跑团页 | `GameRoomPage.vue` 已接入真实房间详情、成员、准备、开局、聊天、行动、DM 提问、骰点动画和右侧统计面板。 |
+| 管理后台 | `AdminPage.vue` 已接入 `/api/v1/admin`，展示统计卡、世界活跃图表、世界观/模组、用户和会话。 |
 
-> 结论：多人实时是**纯增量扩展**。单人模式（`mode='single'`）沿用现有全部逻辑；多人模式（`mode='multiplayer'`）通过 room 层复用同一套 AI 编排与落库通道。
+> 结论：多人实时已从设计进入实现。单人模式（`mode='single'`）沿用原 REST 闭环；多人模式（`mode='multiplayer'`）通过 room 层复用同一套 AI 编排与落库通道。
 
 ---
 

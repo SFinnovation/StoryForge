@@ -18,7 +18,16 @@ from backend.app.ai.services.opening_agent import OpeningAgent
 from backend.app.ai.services.revision_loop import RevisionLoop
 from backend.app.ai.services.rulebook_extractor_agent import RulebookExtractorAgent
 from backend.app.ai.services.summary_agent import SummaryAgent
-from backend.app.ai.services.fallbacks import mock_opening
+from backend.app.ai.services.fallbacks import (
+    mock_action_parse,
+    mock_critic_approve,
+    mock_guidance,
+    mock_module_extract,
+    mock_narrative,
+    mock_opening,
+    mock_rulebook_extract,
+    mock_summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +63,12 @@ class AIModule:
         )
 
     async def parse_action(self, data: ActionParseInput) -> AgentResult[ActionParseOutput]:
-        output, llm = await self.action_parser_agent.parse(data)
+        try:
+            output, llm = await self.action_parser_agent.parse(data)
+        except Exception as exc:
+            logger.warning("ActionParserAgent failed; using local fallback action parse: %s", exc)
+            output = mock_action_parse(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,
@@ -68,11 +82,22 @@ class AIModule:
         hidden_truths: list[str] | None = None,
         npc_private_facts: list[str] | None = None,
     ) -> NarrativeWithReviewResult:
-        result = await self.revision_loop.run(
-            data,
-            hidden_truths=hidden_truths,
-            npc_private_facts=npc_private_facts,
-        )
+        try:
+            result = await self.revision_loop.run(
+                data,
+                hidden_truths=hidden_truths,
+                npc_private_facts=npc_private_facts,
+            )
+        except Exception as exc:
+            logger.warning("RevisionLoop failed; using local fallback narrative: %s", exc)
+            result = NarrativeWithReviewResult(
+                narrative=mock_narrative(data),
+                review=mock_critic_approve(),
+                revision_count=0,
+                used_fallback=True,
+                tokens_used=0,
+                latency_ms=0,
+            )
         return NarrativeWithReviewResult(
             narrative=result.narrative,
             review=result.review,
@@ -83,7 +108,12 @@ class AIModule:
         )
 
     async def generate_summary(self, data: SummaryInput) -> AgentResult[SummaryOutput]:
-        output, llm = await self.summary_agent.generate(data)
+        try:
+            output, llm = await self.summary_agent.generate(data)
+        except Exception as exc:
+            logger.warning("SummaryAgent failed; using local fallback summary: %s", exc)
+            output = mock_summary(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,
@@ -91,7 +121,12 @@ class AIModule:
         )
 
     async def generate_guidance(self, data: GuidanceInput) -> AgentResult[GuidanceOutput]:
-        output, llm = await self.guidance_agent.generate(data)
+        try:
+            output, llm = await self.guidance_agent.generate(data)
+        except Exception as exc:
+            logger.warning("GuidanceAgent failed; using local fallback guidance: %s", exc)
+            output = mock_guidance(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,
@@ -101,7 +136,12 @@ class AIModule:
     async def extract_rulebook(
         self, data: RulebookExtractionInput
     ) -> AgentResult[RulebookExtractionOutput]:
-        output, llm = await self.rulebook_extractor_agent.extract(data)
+        try:
+            output, llm = await self.rulebook_extractor_agent.extract(data)
+        except Exception as exc:
+            logger.warning("RulebookExtractorAgent failed; using local fallback: %s", exc)
+            output = mock_rulebook_extract(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,
@@ -111,7 +151,12 @@ class AIModule:
     async def extract_module(
         self, data: ModuleExtractionInput
     ) -> AgentResult[ModuleExtractionOutput]:
-        output, llm = await self.module_extractor_agent.extract(data)
+        try:
+            output, llm = await self.module_extractor_agent.extract(data)
+        except Exception as exc:
+            logger.warning("ModuleExtractorAgent failed; using local fallback: %s", exc)
+            output = mock_module_extract(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,

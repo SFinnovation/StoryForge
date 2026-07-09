@@ -54,6 +54,18 @@ class StateUpdates(BaseModel):
         return normalized
 
 
+class EndingSignal(BaseModel):
+    should_end: bool = False
+    title: str = ""
+    ending_type: str = "open"
+    rating: str = "B"
+    status: str = "本局结束"
+    summary: str = ""
+    key_nodes: list[str] = Field(default_factory=list)
+    rewards: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
 class NarrativeInput(BaseModel):
     """主叙事 Agent 输入 — 判定结果由后端传入，AI 不得修改。"""
 
@@ -79,6 +91,7 @@ class NarrativeOutput(BaseModel):
     new_clues: list[NewClue] = Field(default_factory=list)
     state_updates: StateUpdates = Field(default_factory=StateUpdates)
     next_options: list[str] = Field(default_factory=list)
+    ending: EndingSignal | None = None
 
     @field_validator("new_clues", mode="before")
     @classmethod

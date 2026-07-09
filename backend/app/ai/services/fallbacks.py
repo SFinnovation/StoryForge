@@ -243,17 +243,27 @@ def mock_critic_approve() -> CriticOutput:
 
 def mock_summary(data: SummaryInput) -> SummaryOutput:
     char = data.character
+    world_name = data.world.name if hasattr(data.world, "name") else str(data.world or "本局冒险")
+    actions = [str(item).strip() for item in data.player_actions if str(item).strip()]
+    narrations = [str(item).strip() for item in data.ai_narrations if str(item).strip()]
+    clues = [
+        item.get("title") if isinstance(item, dict) else str(item).strip()
+        for item in data.discovered_clues
+        if item
+    ]
+    source_text = data.session_summary or " ".join(narrations[-3:]) or "本局已结束，系统已根据现有记录生成离线档案。"
+    summary = source_text[:420]
+    key_choices = actions[-5:] or clues[:5] or ["开始冒险", "推进剧情", "结束本局"]
     return SummaryOutput(
-        title="黑鸦古堡的午夜钟声",
+        title=f"{world_name}档案总结",
         story_summary=(
-            f"本局中，{char.profession}{char.name}抵达黑鸦古堡，发现大厅钟摆异常，"
-            "并从老管家口中得知「午夜钟声」的关键线索。虽然最初观察大厅失败，"
-            "但通过后续行动，艾琳确认失踪学者与午夜钟声有关。"
-            "下一步建议调查东侧走廊和钟摆背后的机关。"
+            f"本局中，{char.name}完成了当前冒险流程。"
+            f"{summary}"
         ),
-        key_choices=["观察大厅", "与老管家交涉"],
+        key_choices=key_choices,
         ending_type="open",
-        next_suggestion="调查东侧走廊和钟摆机关",
+        character_growth="本局经历已记录，可作为后续冒险的角色成长依据。",
+        next_suggestion="可从档案馆继续查看本局记录，或基于未解决线索开启下一次冒险。",
     )
 
 

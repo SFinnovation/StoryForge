@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
                   CHECK (role IN ('user', 'admin')),
     status        TEXT NOT NULL DEFAULT 'active'
                   CHECK (status IN ('active', 'banned')),
+    is_temporary  INTEGER NOT NULL DEFAULT 0
+                  CHECK (is_temporary IN (0, 1)),
     avatar_url    TEXT,
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -150,7 +152,10 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     turns_since_key_clue INTEGER NOT NULL DEFAULT 0
                          CHECK (turns_since_key_clue >= 0),
     started_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-    ended_at      DATETIME
+    ended_at      DATETIME,
+    room_id       INTEGER REFERENCES rooms(id),
+    mode          TEXT NOT NULL DEFAULT 'single',
+    host_user_id  INTEGER REFERENCES users(id)
 );
 
 -- ------------------------------------------------------------
@@ -346,3 +351,106 @@ CREATE TABLE IF NOT EXISTS ai_reviews (
 CREATE INDEX IF NOT EXISTS idx_facts_session_type          ON facts(session_id, fact_type);
 CREATE INDEX IF NOT EXISTS idx_npc_profiles_session_scene  ON npc_profiles(session_id, related_scene);
 CREATE INDEX IF NOT EXISTS idx_ai_reviews_session          ON ai_reviews(session_id, created_at);
+
+-- ============================================================
+-- Multiplayer room tables
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rooms (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_code          TEXT NOT NULL UNIQUE,
+    title              TEXT NOT NULL,
+    description        TEXT,
+    world_id           INTEGER NOT NULL REFERENCES worlds(id),
+    owner_id           INTEGER NOT NULL REFERENCES users(id),
+    current_session_id INTEGER,
+    visibility         TEXT NOT NULL DEFAULT 'private'
+                       CHECK (visibility IN ('public', 'private')),
+    status             TEXT NOT NULL DEFAULT 'waiting'
+                       CHECK (status IN ('waiting', 'playing', 'paused', 'finished', 'archived')),
+    max_players        INTEGER NOT NULL DEFAULT 6,
+    invite_code        TEXT,
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id       INTEGER NOT NULL REFERENCES rooms(id),
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    character_id  INTEGER REFERENCES characters(id),
+    role          TEXT NOT NULL DEFAULT 'player'
+                  CHECK (role IN ('host', 'player', 'spectator')),
+    display_name  TEXT,
+    online_status TEXT NOT NULL DEFAULT 'offline'
+                  CHECK (online_status IN ('online', 'offline')),
+    is_ready      INTEGER NOT NULL DEFAULT 0 CHECK (is_ready IN (0, 1)),
+    joined_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at  DATETIME,
+    UNIQUE (room_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS room_messages (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id        INTEGER NOT NULL REFERENCES rooms(id),
+    session_id     INTEGER,
+    sender_user_id INTEGER REFERENCES users(id),
+    sender_role    TEXT NOT NULL CHECK (sender_role IN ('user', 'ai_dm', 'system')),
+    sender_name    TEXT,
+    message_type   TEXT NOT NULL,
+    content        TEXT NOT NULL,
+    payload_json   TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
+    client_msg_id  TEXT,
+    seq            INTEGER NOT NULL,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (room_id, client_msg_id),
+    UNIQUE (room_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS room_actions (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id            INTEGER NOT NULL REFERENCES rooms(id),
+    session_id         INTEGER,
+    actor_user_id      INTEGER NOT NULL REFERENCES users(id),
+    actor_character_id INTEGER REFERENCES characters(id),
+    action_text        TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending', 'processing', 'done', 'rejected')),
+    result_message_id  INTEGER,
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at       DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_rooms_owner_status       ON rooms(owner_id, status);
+CREATE INDEX IF NOT EXISTS idx_room_members_room        ON room_members(room_id);
+CREATE INDEX IF NOT EXISTS idx_room_members_user        ON room_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_messages_room_seq   ON room_messages(room_id, seq);
+CREATE INDEX IF NOT EXISTS idx_room_actions_room        ON room_actions(room_id, status);
+
+-- ============================================================
+-- Story authoring tables
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL,
+    description TEXT,
+    status      TEXT DEFAULT 'draft',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chapters (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id  INTEGER NOT NULL REFERENCES stories(id),
+    title     TEXT NOT NULL,
+    content   TEXT,
+    "order"   INTEGER DEFAULT 0,
+    parent_id INTEGER REFERENCES chapters(id)
+);
+
+CREATE TABLE IF NOT EXISTS worldbuilding_entries (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id   INTEGER NOT NULL REFERENCES stories(id),
+    entry_type TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    content    TEXT
+);

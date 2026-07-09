@@ -9,6 +9,7 @@ from backend.app.core.exceptions import StoryForgeError
 from backend.app.models.models import Character, User
 from backend.app.schemas.api_response import success
 from backend.app.schemas.character import CharacterCreate, CharacterResponse
+from backend.app.services.auth_service import hash_password
 from backend.app.services.rule_service import ability_modifier, load_rule_file
 
 router = APIRouter(prefix="/characters", tags=["characters"])
@@ -164,9 +165,11 @@ def _ensure_user(db: Session, user_id: int) -> None:
         User(
             id=user_id,
             username=f"demo_user_{user_id}",
-            password_hash="demo",
+            password_hash=hash_password("demo"),
             nickname="Demo User",
             role="user",
+            status="active",
+            is_temporary=0,
         )
     )
     db.flush()

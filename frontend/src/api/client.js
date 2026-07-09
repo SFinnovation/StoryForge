@@ -161,8 +161,15 @@ const withAuth = (payload) => {
 export const authApi = {
   register: (payload) => apiRequest('/auth/register', { method: 'POST', body: payload, auth: false }).then(withAuth),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload, auth: false }).then(withAuth),
+  guest: () => apiRequest('/auth/guest', { method: 'POST', auth: false }).then(withAuth),
   me: () => apiRequest('/auth/me'),
-  logout: clearAuth
+  logout: async () => {
+    try {
+      if (getStoredToken()) await apiRequest('/auth/logout', { method: 'POST' })
+    } finally {
+      clearAuth()
+    }
+  }
 }
 
 export const rulesApi = {
@@ -231,6 +238,36 @@ export const sessionsApi = {
   action: (sessionId, actionText) =>
     apiRequest(`/sessions/${sessionId}/action`, { method: 'POST', body: { action_text: actionText } }),
   end: (sessionId) => apiRequest(`/sessions/${sessionId}/end`, { method: 'POST' }),
+  delete: (sessionId) => apiRequest(`/sessions/${sessionId}`, { method: 'DELETE' }),
   generateReport: (sessionId) => apiRequest(`/sessions/${sessionId}/report/generate`, { method: 'POST' }),
   report: (sessionId) => apiRequest(`/sessions/${sessionId}/report`)
+}
+
+const toQueryString = (params = {}) => {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.set(key, String(value))
+    }
+  })
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
+
+export const adminApi = {
+  summary: () => apiRequest('/admin/summary'),
+  worlds: ({ includeDisabled = true } = {}) =>
+    apiRequest(`/admin/worlds${toQueryString({ include_disabled: includeDisabled })}`),
+  sessions: (params = {}) => apiRequest(`/admin/sessions${toQueryString(params)}`),
+  users: (params = {}) => apiRequest(`/admin/users${toQueryString(params)}`),
+  createWorld: (payload) => apiRequest('/admin/worlds', { method: 'POST', body: payload }),
+  enableWorld: (worldId) => apiRequest(`/admin/worlds/${worldId}/enable`, { method: 'POST' }),
+  deleteWorld: (worldId) => apiRequest(`/admin/worlds/${worldId}`, { method: 'DELETE' }),
+  createModule: (worldId, payload) => apiRequest(`/admin/worlds/${worldId}/modules`, { method: 'POST', body: payload }),
+  enableModule: (moduleId) => apiRequest(`/admin/modules/${moduleId}/enable`, { method: 'POST' }),
+  deleteModule: (moduleId) => apiRequest(`/admin/modules/${moduleId}`, { method: 'DELETE' }),
+  dissolveSession: (sessionId, payload = {}) =>
+    apiRequest(`/admin/sessions/${sessionId}/dissolve`, { method: 'POST', body: payload }),
+  banUser: (userId, payload = {}) => apiRequest(`/admin/users/${userId}/ban`, { method: 'POST', body: payload }),
+  unbanUser: (userId, payload = {}) => apiRequest(`/admin/users/${userId}/unban`, { method: 'POST', body: payload })
 }
