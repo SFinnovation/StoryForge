@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { charactersApi, roomsApi, worldsApi } from './api/client'
 import { RoomSocket, newClientMsgId } from './api/wsClient'
 
+const DEMO_USER_ID = 1
+
 const props = defineProps({
   currentUser: { type: Object, default: null },
   initialRoomId: { type: [Number, String], default: null }
@@ -18,7 +20,7 @@ const myRooms = ref([])
 const publicRooms = ref([])
 const worlds = ref([])
 const myCharacters = ref([])
-const createForm = reactive({ title: '', world_id: null, max_players: 6 })
+const createForm = reactive({ title: '', world_id: null, max_players: 4 })
 const joinForm = reactive({ room_code: '', character_id: null })
 
 // 房间数据
@@ -35,11 +37,36 @@ const actionInput = ref('')
 const dmAskInput = ref('')
 const typingUsers = ref({})
 const socket = ref(null)
+const isExitConfirmOpen = ref(false)
 
-const myUserId = computed(() => props.currentUser?.id ?? null)
+const myUserId = computed(() => props.currentUser?.id ?? DEMO_USER_ID)
 const isHost = computed(() => room.value && room.value.owner_id === myUserId.value)
 const isPlaying = computed(() => room.value?.status === 'playing')
 const myMember = computed(() => members.value.find((m) => m.user_id === myUserId.value) || null)
+const selectedCharacter = computed(() =>
+  myCharacters.value.find((c) => c.id === myMember.value?.character_id) || null
+)
+const memberCountLabel = computed(() => `${members.value.length}/${room.value?.max_players || '-'}`)
+const isRoomFull = computed(() => Boolean(room.value) && members.value.length >= room.value.max_players)
+const allMembersHaveCharacters = computed(() =>
+  members.value.length > 0 && members.value.every((m) => Boolean(m.character_id))
+)
+const allMembersReady = computed(() =>
+  members.value.length > 0 && members.value.every((m) => Boolean(m.is_ready))
+)
+const readyDisabledReason = computed(() => {
+  if (isPlaying.value) return ''
+  if (!myMember.value?.character_id) return '请先选择出战角色'
+  return ''
+})
+const startDisabledReason = computed(() => {
+  if (!isHost.value || isPlaying.value || !room.value) return ''
+  if (!isRoomFull.value) return `等待成员加入：${memberCountLabel.value}`
+  if (!allMembersHaveCharacters.value) return '等待所有成员选择出战角色'
+  if (!allMembersReady.value) return '等待所有成员准备就绪'
+  return ''
+})
+const canStartGame = computed(() => isHost.value && !loading.value && !startDisabledReason.value)
 
 const typingLabel = computed(() => {
   const names = Object.values(typingUsers.value).filter(Boolean)
@@ -62,6 +89,14 @@ const setError = (err) => {
 }
 
 // ---------------- 大厅 ----------------
+
+const loadMyCharacters = async () => {
+  const charList = await charactersApi.list().catch(() => [])
+  myCharacters.value = charList || []
+  if (!joinForm.character_id && myCharacters.value.length) {
+    joinForm.character_id = myCharacters.value[0].id
+  }
+}
 
 const loadLobby = async () => {
   loading.value = true
@@ -97,7 +132,7 @@ const handleCreate = async () => {
     const detail = await roomsApi.create({
       title: createForm.title.trim(),
       world_id: createForm.world_id,
-      max_players: Number(createForm.max_players) || 6
+      max_players: Number(createForm.max_players) || 4
     })
     await enterRoom(detail.room.id)
   } catch (err) {
@@ -159,6 +194,11 @@ const applyDetail = (detail) => {
   if (!detail) return
   if (detail.room) room.value = detail.room
   if (detail.members) members.value = detail.members
+}
+
+const refreshRoomDetail = async () => {
+  if (!room.value?.id) return
+  applyDetail(await roomsApi.get(room.value.id))
 }
 
 const handleEvent = (event) => {
@@ -249,6 +289,9 @@ const handleEvent = (event) => {
 const enterRoom = async (roomId) => {
   loading.value = true
   try {
+    if (!myCharacters.value.length) {
+      await loadMyCharacters()
+    }
     const detail = await roomsApi.get(roomId)
     applyDetail(detail)
     messages.value = []
@@ -294,10 +337,32 @@ const leaveToLobby = async () => {
   await loadLobby()
 }
 
+const requestLeaveRoom = () => {
+  if (view.value !== 'room') {
+    leaveToLobby()
+    return
+  }
+  isExitConfirmOpen.value = true
+}
+
+const cancelLeaveRoom = () => {
+  isExitConfirmOpen.value = false
+}
+
+const confirmLeaveRoom = async () => {
+  isExitConfirmOpen.value = false
+  await leaveToLobby()
+}
+
 const toggleReady = async () => {
   if (!room.value || !myMember.value) return
+  if (!myMember.value.character_id) {
+    setError('请先选择出战角色')
+    return
+  }
   try {
     await roomsApi.setReady(room.value.id, !myMember.value.is_ready)
+    await refreshRoomDetail()
   } catch (err) {
     setError(err)
   }
@@ -306,17 +371,25 @@ const toggleReady = async () => {
 // ---------------- 房间内操作 ----------------
 
 const chooseCharacter = async (characterId) => {
+  if (!characterId) return
   try {
     await roomsApi.setCharacter(room.value.id, characterId)
+    await refreshRoomDetail()
   } catch (err) {
     setError(err)
   }
 }
 
 const startGame = async () => {
+  if (startDisabledReason.value) {
+    setError(startDisabledReason.value)
+    return
+  }
   loading.value = true
   try {
-    await roomsApi.start(room.value.id, myMember.value?.character_id || null)
+    const result = await roomsApi.start(room.value.id, myMember.value?.character_id || null)
+    applyDetail(result.detail)
+    if (result.opening_message) pushMessage(result.opening_message)
   } catch (err) {
     setError(err)
   } finally {
@@ -340,7 +413,7 @@ const sendChat = async () => {
   chatInput.value = ''
   if (!socket.value || !socket.value.sendChat(content, cid)) {
     try {
-      await roomsApi.chat(room.value.id, content, cid)
+      pushMessage(await roomsApi.chat(room.value.id, content, cid))
     } catch (err) {
       setError(err)
     }
@@ -355,7 +428,7 @@ const sendOoc = async () => {
   oocInput.value = ''
   if (!socket.value || !socket.value.sendOoc(content, cid)) {
     try {
-      await roomsApi.ooc(room.value.id, content, cid)
+      pushMessage(await roomsApi.ooc(room.value.id, content, cid))
     } catch (err) {
       setError(err)
     }
@@ -397,12 +470,23 @@ const submitDmAsk = async () => {
 
 const messageTypeLabel = (m) => {
   if (m.message_type === 'dm_ask') return '问 DM'
+  if (m.message_type === 'chat') return '聊天'
+  if (m.message_type === 'narration') return '旁白'
   if (m.message_type === 'guidance') return 'DM 建议'
   if (m.message_type === 'ooc') return '场外讨论'
   return m.message_type
 }
 
 const characterName = (id) => myCharacters.value.find((c) => c.id === id)?.name || null
+const memberDisplayName = (m) => m.display_name || `玩家${m.user_id || ''}`
+const memberCharacterName = (m) => m.character_name || characterName(m.character_id) || ''
+const characterSummary = (c) => {
+  if (!c) return ''
+  const pieces = [c.name]
+  if (c.level) pieces.push(`Lv.${c.level}`)
+  if (c.class_id) pieces.push(c.class_id)
+  return pieces.join(' · ')
+}
 
 const roleLabel = (m) => (m.sender_role === 'ai_dm' ? 'AI DM' : m.sender_name || `玩家${m.sender_user_id || ''}`)
 
@@ -428,7 +512,9 @@ watch(
 <template>
   <div class="room-shell">
     <header class="topbar">
-      <button class="ghost" @click="leaveToLobby">← 返回大厅</button>
+      <button class="ghost" @click="requestLeaveRoom">
+        {{ view === 'room' ? '退出房间' : '← 返回大厅' }}
+      </button>
       <h1>多人房间 · AI DM 跑团</h1>
       <span v-if="view === 'room'" class="ws-badge" :data-status="wsStatus">{{ wsStatus }}</span>
     </header>
@@ -448,7 +534,7 @@ watch(
           </select>
         </label>
         <label>人数上限
-          <input v-model.number="createForm.max_players" type="number" min="2" max="12" />
+          <input v-model.number="createForm.max_players" type="number" min="1" max="12" />
         </label>
         <button class="primary" :disabled="loading" @click="handleCreate">创建并进入</button>
       </div>
@@ -511,34 +597,48 @@ watch(
           </p>
         </div>
 
-        <h3>成员 ({{ members.length }})</h3>
+        <h3>成员 ({{ memberCountLabel }})</h3>
         <ul class="members">
           <li v-for="m in members" :key="m.user_id">
             <span class="dot" :data-online="m.online_status" />
-            <span class="mname">{{ m.display_name || ('玩家' + m.user_id) }}</span>
-            <span v-if="m.role === 'host'" class="tag host">房主</span>
-            <span v-if="m.is_ready" class="tag ready">已准备</span>
-            <span v-if="m.character_id" class="tag">{{ characterName(m.character_id) || '已选角色' }}</span>
+            <span class="member-main">
+              <span class="mname">{{ memberDisplayName(m) }}</span>
+              <span class="member-character">
+                {{ memberCharacterName(m) ? `出战：${memberCharacterName(m)}` : '未选择出战角色' }}
+              </span>
+            </span>
+            <span class="member-tags">
+              <span v-if="m.role === 'host'" class="tag host">房主</span>
+              <span v-if="m.is_ready" class="tag ready">已准备</span>
+              <span v-else class="tag">未准备</span>
+            </span>
           </li>
         </ul>
 
         <div v-if="!isPlaying" class="prep">
           <h3>选择出战角色</h3>
-          <select :value="myMember?.character_id || ''" @change="chooseCharacter(Number($event.target.value))">
-            <option value="" disabled>请选择</option>
+          <select
+            :value="myMember?.character_id || ''"
+            :disabled="!myCharacters.length"
+            @change="chooseCharacter(Number($event.target.value))"
+          >
+            <option value="" disabled>{{ myCharacters.length ? '请选择' : '暂无可用角色' }}</option>
             <option v-for="c in myCharacters" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
-          <button class="ghost" @click="toggleReady">
+          <p v-if="selectedCharacter" class="muted">当前出战：{{ characterSummary(selectedCharacter) }}</p>
+          <p v-else class="muted">请选择一个角色后再准备。</p>
+          <button class="ghost" :disabled="Boolean(readyDisabledReason)" @click="toggleReady">
             {{ myMember?.is_ready ? '取消准备' : '准备就绪' }}
           </button>
-          <button v-if="isHost" class="primary" :disabled="loading" @click="startGame">开始游戏</button>
-          <p v-else class="muted">等待房主开始游戏…</p>
+          <button v-if="isHost" class="primary" :disabled="!canStartGame" @click="startGame">开始游戏</button>
+          <p v-if="isHost && startDisabledReason" class="muted">{{ startDisabledReason }}</p>
+          <p v-if="!isHost" class="muted">等待房主开始游戏…</p>
         </div>
         <div v-else class="prep">
           <button v-if="isHost" class="danger" @click="endGame">结束本局</button>
         </div>
 
-        <button class="ghost" @click="leaveToLobby">离开房间</button>
+        <button class="ghost" @click="requestLeaveRoom">退出房间</button>
       </aside>
 
       <main class="stream">
@@ -600,6 +700,17 @@ watch(
         </div>
       </main>
     </section>
+
+    <div v-if="isExitConfirmOpen" class="exit-modal-backdrop" role="presentation">
+      <section class="exit-modal" role="dialog" aria-modal="true" aria-labelledby="exit-room-title">
+        <h2 id="exit-room-title">确认退出房间？</h2>
+        <p>退出房间会导致角色死亡，本次冒险将结束。确定要退出吗？</p>
+        <div class="exit-modal-actions">
+          <button class="ghost" type="button" @click="cancelLeaveRoom">继续冒险</button>
+          <button class="danger" type="button" @click="confirmLeaveRoom">确认退出</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -641,6 +752,7 @@ input, select {
   padding: 8px 10px; border-radius: 6px; font-size: 14px;
 }
 button { cursor: pointer; border-radius: 6px; padding: 8px 14px; font-size: 14px; border: none; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
 .primary { background: #f5b95b; color: #1a1206; font-weight: 600; }
 .primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .ghost { background: transparent; border: 1px solid #4a3d26; color: #e9dcc3; }
@@ -674,11 +786,15 @@ button { cursor: pointer; border-radius: 6px; padding: 8px 14px; font-size: 14px
 }
 .side h2 { color: #f5b95b; margin: 0; font-size: 18px; }
 .side h3 { margin: 8px 0 4px; font-size: 13px; color: #b7a888; text-transform: uppercase; }
-.members { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.members li { display: flex; align-items: center; gap: 6px; font-size: 14px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+.members { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.members li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; }
+.dot { width: 8px; height: 8px; flex: 0 0 8px; margin-top: 6px; border-radius: 50%; background: #555; }
 .dot[data-online='online'] { background: #7ee081; }
-.mname { flex: 1; }
+.member-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mname { color: #e9dcc3; overflow-wrap: anywhere; }
+.member-character { color: #8a7c60; font-size: 12px; overflow-wrap: anywhere; }
+.member-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 108px; }
+.member-tags .tag { margin-left: 0; }
 .prep { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid #2c2418; }
 
 .stream { display: flex; flex-direction: column; background: #14110c; border: 1px solid #2c2418; border-radius: 10px; overflow: hidden; }
@@ -699,4 +815,38 @@ button { cursor: pointer; border-radius: 6px; padding: 8px 14px; font-size: 14px
 .composer { border-top: 1px solid #2c2418; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; gap: 8px; }
 .row input { flex: 1; }
+.exit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+}
+.exit-modal {
+  width: min(420px, 100%);
+  border: 1px solid #6b5a33;
+  border-radius: 10px;
+  background: #14110c;
+  color: #e9dcc3;
+  padding: 24px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.56);
+}
+.exit-modal h2 {
+  margin: 0 0 12px;
+  color: #f5b95b;
+  font-size: 20px;
+}
+.exit-modal p {
+  margin: 0;
+  color: #b7a888;
+  line-height: 1.8;
+}
+.exit-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+}
 </style>

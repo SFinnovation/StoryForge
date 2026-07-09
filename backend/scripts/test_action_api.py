@@ -36,10 +36,12 @@ async def main() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         start = await client.post(
             "/api/v1/sessions/start",
-            json={"world_id": 2, "character_id": 1},
+            json={"world_id": 2, "character_id": 1, "difficulty": "hard"},
         )
         assert start.status_code == 200, start.text
-        session_id = start.json()["data"]["session"]["id"]
+        session_data = start.json()["data"]["session"]
+        assert session_data["difficulty"] == "hard"
+        session_id = session_data["id"]
 
         resp = await client.post(
             f"/api/v1/sessions/{session_id}/action",
@@ -51,6 +53,7 @@ async def main() -> None:
         data = body["data"]
 
         assert data["check"]["attribute_used"] == "wisdom"
+        assert data["check"]["dc"] == 20
         assert data["story"]["narration"]
         assert data["ai_review"]["approved"] is True
         assert data["ai_review"]["overall_score"] >= 80

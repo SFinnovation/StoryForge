@@ -146,6 +146,7 @@ def _session_payload(session: GameSession, *, include_messages: bool = False) ->
         "character_id": session.character_id,
         "title": session.title,
         "status": session.status,
+        "difficulty": session.difficulty,
         "current_scene": session.current_scene,
         "current_task": session.current_task,
         "summary": session.summary,

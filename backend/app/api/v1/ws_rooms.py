@@ -16,6 +16,7 @@
 """
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from backend.app.api.deps import DEMO_USER_ID
 from backend.app.core.exceptions import StoryForgeError
 from backend.app.db.database import SessionLocal
 from backend.app.repositories.room_repository import RoomMemberRepo
@@ -32,7 +33,7 @@ WS_CLOSE_FORBIDDEN = 4403
 
 def _authenticate(token: str | None) -> int | None:
     if not token:
-        return None
+        return DEMO_USER_ID
     try:
         return decode_access_token(token).user_id
     except StoryForgeError:

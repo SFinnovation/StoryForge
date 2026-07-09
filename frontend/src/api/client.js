@@ -9,7 +9,8 @@ const FIELD_LABELS = {
   nickname: '昵称',
   action_text: '行动内容',
   name: '名称',
-  title: '标题'
+  title: '标题',
+  difficulty: '挑战难度'
 }
 
 const getFieldLabel = (loc) => {

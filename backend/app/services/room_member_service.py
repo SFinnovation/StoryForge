@@ -120,6 +120,8 @@ def set_ready(db: Session, room_id: int, user_id: int, is_ready: bool) -> RoomMe
     member = RoomMemberRepo(db).get(room_id, user_id)
     if member is None:
         raise StoryForgeError("not a member of this room", status_code=403)
+    if is_ready and member.character_id is None:
+        raise StoryForgeError("select a character before getting ready", status_code=422)
     try:
         member.is_ready = 1 if is_ready else 0
         db.commit()

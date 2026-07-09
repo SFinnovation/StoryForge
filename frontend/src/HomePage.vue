@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { charactersApi, roomsApi, sessionsApi, worldsApi } from './api/client'
 import JoinRoomModal from './JoinRoomModal.vue'
 import lobbyBackground from '../背景/大厅界面.png'
@@ -21,7 +21,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['navigate', 'enter-room', 'session-created', 'logout'])
+const emit = defineEmits(['navigate', 'enter-room', 'session-created', 'logout', 'back-button-hidden'])
 
 const showCreateModal = ref(false)
 const showJoinModal = ref(false)
@@ -36,12 +36,14 @@ const apiStatus = ref('')
 const joinRoomError = ref('')
 const isSubmitting = ref(false)
 
+watch([showCreateModal, showJoinModal], ([isCreateOpen, isJoinOpen]) => {
+  emit('back-button-hidden', isCreateOpen || isJoinOpen)
+}, { immediate: true })
+
 const createRoomForm = reactive({
   roomName: '追捕克伦可团',
-  scriptTemplate: '追捕克伦可',
   maxPlayers: 4,
   roomType: 'public',
-  aiStyle: 'immersive',
   difficulty: 'normal'
 })
 
@@ -170,13 +172,6 @@ const lastAdventure = computed(() => {
   }
 })
 
-const aiStyles = [
-  { value: 'classic', label: '经典说书' },
-  { value: 'immersive', label: '沉浸叙事' },
-  { value: 'humorous', label: '轻松诙谐' },
-  { value: 'mysterious', label: '悬疑迷雾' }
-]
-
 const difficulties = [
   { value: 'easy', label: '轻松' },
   { value: 'normal', label: '标准' },
@@ -203,17 +198,26 @@ const refreshLobbyData = async () => {
   }
 }
 
-const selectedWorld = () => (
-  worlds.value.find((world) => world.name === createRoomForm.scriptTemplate) || worlds.value[0] || null
-)
+const selectedWorld = () => worlds.value[0] || null
+
+const enterExistingPlayingSession = async () => {
+  await refreshLobbyData()
+  const playingSession = sessions.value.find((session) => session.status === 'playing') || sessions.value[0]
+  if (playingSession) {
+    showCreateModal.value = false
+    apiStatus.value = ''
+    emit('session-created', { session: playingSession })
+    return true
+  }
+  return false
+}
 
 const handleCreateRoom = async () => {
   apiStatus.value = ''
 
   if (characters.value.length === 0) {
     showCreateModal.value = false
-    apiStatus.value = '请先创建角色，再开启冒险。'
-    emit('navigate', '角色', selectedWorld())
+    emit('navigate', '世界观')
     return
   }
 
@@ -318,7 +322,7 @@ const handleHistory = () => {
 
 const handleAction = (action) => {
   if (action.key === 'create') {
-    showCreateModal.value = true
+    emit('navigate', '世界观')
     return
   }
 
@@ -531,14 +535,6 @@ onMounted(refreshLobbyData)
                 required
               />
             </div>
-
-            <div class="form-group">
-              <label class="form-label">模组模板</label>
-              <select v-model="createRoomForm.scriptTemplate" class="form-select" required>
-                <option value="">请选择模组</option>
-                <option v-for="template in scriptTemplates" :key="template" :value="template">{{ template }}</option>
-              </select>
-            </div>
           </div>
 
           <div class="form-row">
@@ -555,6 +551,7 @@ onMounted(refreshLobbyData)
             <div class="form-group">
               <label class="form-label">人数上限</label>
               <select v-model="createRoomForm.maxPlayers" class="form-select">
+                <option :value="1">1 人</option>
                 <option :value="2">2 人</option>
                 <option :value="3">3 人</option>
                 <option :value="4">4 人</option>
@@ -564,20 +561,11 @@ onMounted(refreshLobbyData)
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">AI 掌卷风格</label>
-              <select v-model="createRoomForm.aiStyle" class="form-select">
-                <option v-for="style in aiStyles" :key="style.value" :value="style.value">{{ style.label }}</option>
-              </select>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">挑战难度</label>
-              <select v-model="createRoomForm.difficulty" class="form-select">
-                <option v-for="diff in difficulties" :key="diff.value" :value="diff.value">{{ diff.label }}</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label class="form-label">挑战难度</label>
+            <select v-model="createRoomForm.difficulty" class="form-select">
+              <option v-for="diff in difficulties" :key="diff.value" :value="diff.value">{{ diff.label }}</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -596,7 +584,9 @@ onMounted(refreshLobbyData)
 
           <div class="modal-footer">
             <button type="button" class="panel-button secondary" @click="showCreateModal = false">取消</button>
-            <button type="submit" class="panel-button primary solid">创建房间</button>
+            <button type="submit" class="panel-button primary solid" :disabled="isSubmitting">
+              {{ isSubmitting ? '创建中...' : '创建房间' }}
+            </button>
           </div>
         </form>
       </div>
@@ -682,6 +672,9 @@ onMounted(refreshLobbyData)
 }
 
 .nav-logo {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -717,6 +710,9 @@ onMounted(refreshLobbyData)
 }
 
 .nav-menu {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -754,6 +750,9 @@ onMounted(refreshLobbyData)
 }
 
 .nav-user {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -1215,6 +1214,13 @@ onMounted(refreshLobbyData)
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
 }
 
+.panel-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+  box-shadow: none;
+}
+
 .panel-button.primary {
   width: calc(100% - 40px);
   margin: 0 20px 20px;
@@ -1302,6 +1308,10 @@ onMounted(refreshLobbyData)
   gap: 14px;
 }
 
+.form-row > .form-group:only-child {
+  grid-column: 1 / -1;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -1375,22 +1385,19 @@ onMounted(refreshLobbyData)
 
 @media (max-width: 900px) {
   .navbar {
-    grid-template-columns: 1fr;
-    justify-items: start;
-    gap: 16px;
-    padding: 18px 18px 12px;
+    grid-template-columns: 1fr auto 1fr;
+    justify-items: stretch;
+    gap: 12px;
+    padding: 14px 18px 10px;
   }
 
   .nav-menu {
-    width: 100%;
-    justify-content: space-between;
-    gap: 12px;
-    overflow-x: auto;
+    display: none;
   }
 
   .nav-user {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
   }
 
   .lobby-shell {

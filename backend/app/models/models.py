@@ -177,6 +177,7 @@ class GameSession(Base):
     character_id: Mapped[int] = mapped_column(ForeignKey("characters.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(10), default="playing", nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(10), default="normal", nullable=False)
     current_scene: Mapped[str | None] = mapped_column(Text)
     current_task: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
@@ -206,6 +207,10 @@ class GameSession(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('playing','finished','archived')", name="ck_sessions_status"),
+        CheckConstraint(
+            "difficulty IN ('easy','normal','hard','nightmare')",
+            name="ck_sessions_difficulty",
+        ),
     )
 
 
@@ -487,6 +492,8 @@ class RoomMember(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     room: Mapped["Room"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
+    character: Mapped["Character | None"] = relationship()
 
     __table_args__ = (
         UniqueConstraint("room_id", "user_id", name="uq_room_members_room_user"),

@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS game_sessions (
     title         TEXT,
     status        TEXT NOT NULL DEFAULT 'playing'
                   CHECK (status IN ('playing', 'finished', 'archived')),
+    difficulty    TEXT NOT NULL DEFAULT 'normal'
+                  CHECK (difficulty IN ('easy', 'normal', 'hard', 'nightmare')),
     current_scene TEXT,
     current_task  TEXT,
     summary       TEXT,

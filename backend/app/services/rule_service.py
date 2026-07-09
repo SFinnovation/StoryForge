@@ -39,6 +39,13 @@ PROFESSION_SKILLS: dict[str, set[str]] = {
 
 PROFICIENCY_BONUS = 2  # MVP 1 级固定
 
+DIFFICULTY_DC = {
+    "easy": 10,
+    "normal": 15,
+    "hard": 20,
+    "nightmare": 25,
+}
+
 
 @dataclass
 class CheckOutcome:
@@ -88,6 +95,10 @@ def ability_modifier(score: int) -> int:
 
 def clamp_dc(dc: int) -> int:
     return max(5, min(30, dc))
+
+
+def dc_for_difficulty(difficulty: str | None) -> int:
+    return DIFFICULTY_DC.get(difficulty or "normal", DIFFICULTY_DC["normal"])
 
 
 def resolve_attribute_for_skill(skill_key: str | None, fallback_attribute: str) -> str:

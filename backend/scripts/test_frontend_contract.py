@@ -94,10 +94,13 @@ async def main() -> None:
         start = await client.post(
             "/api/v1/sessions/start",
             headers=headers,
-            json={"world_id": 2, "character_id": character_id},
+            json={"world_id": 2, "character_id": character_id, "title": "前端联调房间", "difficulty": "easy"},
         )
         assert start.status_code == 200, start.text
-        session_id = start.json()["data"]["session"]["id"]
+        session_data = start.json()["data"]["session"]
+        assert session_data["title"] == "前端联调房间"
+        assert session_data["difficulty"] == "easy"
+        session_id = session_data["id"]
 
         detail = await client.get(f"/api/v1/sessions/{session_id}", headers=headers)
         assert detail.status_code == 200, detail.text
@@ -110,6 +113,7 @@ async def main() -> None:
         )
         assert action.status_code == 200, action.text
         action_data = action.json()["data"]
+        assert action_data["check"]["dc"] == 10
         assert action_data["story"]["narration"]
         assert action_data["session_meta"]["current_scene"]
 

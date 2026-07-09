@@ -21,7 +21,7 @@ from backend.app.schemas.session_schema import (
 from backend.app.services.ai_service import get_ai_service
 from backend.app.services.clue_pressure import calculate as calc_clue_pressure
 from backend.app.services.context_builder import build_for_action, character_to_card
-from backend.app.services.rule_service import roll_check
+from backend.app.services.rule_service import dc_for_difficulty, roll_check
 from backend.app.services.session_service import get_playing_session
 from backend.app.services.state_committer import commit_action
 
@@ -82,7 +82,7 @@ async def run_action_pipeline(
             check_type=parsed.check_type,
             skill_key=parsed.skill_key,
             attribute_used=parsed.attribute_used,
-            dc=parsed.suggested_dc,
+            dc=dc_for_difficulty(session.difficulty or "normal"),
         )
         check_result_model = CheckResult(
             success=check_outcome.is_success,

@@ -62,11 +62,14 @@ def room_dto(room: Room) -> RoomDTO:
 
 
 def member_dto(member: RoomMember) -> RoomMemberDTO:
+    user = getattr(member, "user", None)
+    character = getattr(member, "character", None)
     return RoomMemberDTO(
         user_id=member.user_id,
         character_id=member.character_id,
+        character_name=character.name if character else None,
         role=member.role,
-        display_name=member.display_name,
+        display_name=member.display_name or (user.nickname or user.username if user else None),
         online_status=member.online_status,
         is_ready=bool(member.is_ready),
     )
@@ -172,11 +175,21 @@ async def start_game(
     room = require_owner(db, room_id, user_id)
     if room.status == "playing" and room.current_session_id:
         raise StoryForgeError("room is already playing", status_code=409)
+    if room.status != "waiting":
+        raise StoryForgeError("room is not waiting for players", status_code=409)
 
     host_member = require_member(db, room_id, user_id)
     chosen_character_id = character_id or host_member.character_id
     if chosen_character_id is None:
         raise StoryForgeError("host must select a character before starting", status_code=422)
+
+    members = RoomMemberRepo(db).list_by_room(room_id)
+    if len(members) < room.max_players:
+        raise StoryForgeError("room must be full before starting", status_code=409)
+    if any(m.character_id is None for m in members):
+        raise StoryForgeError("all members must select a character before starting", status_code=422)
+    if any(not m.is_ready for m in members):
+        raise StoryForgeError("all members must be ready before starting", status_code=409)
 
     character = db.get(Character, chosen_character_id)
     if character is None or character.user_id != user_id:

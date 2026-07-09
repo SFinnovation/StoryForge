@@ -27,6 +27,7 @@ os.environ.setdefault("AKP_ENABLED", "false")
 
 from backend.app.db.database import SessionLocal
 from backend.app.db.init_db import init_db
+from backend.app.core.exceptions import StoryForgeError
 from backend.app.models.models import Character, RoomMessage, User, World
 from backend.app.schemas.room_schema import (
     RoomCreateRequest,
@@ -84,15 +85,27 @@ async def main() -> int:
         # 1) 建房（host 自动成为 host 成员）
         detail = room_service.create_room(
             db, host_id,
-            RoomCreateRequest(world_id=world.id, title="锻炉街突袭", max_players=4),
+            RoomCreateRequest(world_id=world.id, title="锻炉街突袭", max_players=2),
         )
         room_id = detail.room.id
         code = detail.room.room_code
         print(f"\n== 建房 room_id={room_id} code={code} 成员数={len(detail.members)} ==")
         assert len(detail.members) == 1 and detail.members[0].role == "host"
 
+        try:
+            room_member_service.set_ready(db, room_id, host_id, True)
+            raise AssertionError("未选角时不应允许准备")
+        except StoryForgeError as exc:
+            assert exc.status_code == 422
+
         # 2) host 选择角色
         room_member_service.set_character(db, room_id, host_id, host_char_id)
+
+        try:
+            await room_service.start_game(db, room_id, host_id, host_char_id)
+            raise AssertionError("未满员时不应允许开局")
+        except StoryForgeError as exc:
+            assert exc.status_code == 409
 
         # 3) 第二名玩家加入并选角色
         rid, member, is_new = room_member_service.join_room(
@@ -103,6 +116,9 @@ async def main() -> int:
 
         detail = room_service.get_room_detail(db, room_id, host_id)
         assert len(detail.members) == 2
+
+        room_member_service.set_ready(db, room_id, host_id, True)
+        room_member_service.set_ready(db, room_id, guest_id, True)
 
         # 幂等：重复加入不新增
         _, _, is_new2 = room_member_service.join_room(

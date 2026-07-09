@@ -376,7 +376,7 @@ async def run_e2e(base_url: str, suite: SuiteResult, verbose: bool, db_path: Pat
                 "title": f"E2E团_{suffix}",
                 "world_id": world_id,
                 "visibility": "public",
-                "max_players": 4,
+                "max_players": 2,
             },
         )
         room = detail["room"]

@@ -76,6 +76,8 @@ def _ensure_legacy_columns() -> None:
             )
         if "host_user_id" not in session_columns:
             statements.append("ALTER TABLE game_sessions ADD COLUMN host_user_id INTEGER")
+        if "difficulty" not in session_columns:
+            statements.append("ALTER TABLE game_sessions ADD COLUMN difficulty VARCHAR(10) NOT NULL DEFAULT 'normal'")
 
     if not statements:
         return
@@ -182,9 +184,10 @@ def seed_demo_data() -> None:
             else:
                 world.name = item["name"]
                 world.type = item["type"]
-                world.description = item["description"]
-                world.opening_prompt = item["opening_prompt"]
-                world.rule_style = item["rule_style"]
+                if not world.rulebook_pack_id and not world.adventure_module_id:
+                    world.description = item["description"]
+                    world.opening_prompt = item["opening_prompt"]
+                    world.rule_style = item["rule_style"]
                 world.difficulty = "normal"
                 world.created_by = world.created_by or 1
                 world.is_enabled = 1
@@ -221,6 +224,7 @@ def seed_demo_data() -> None:
                     character_id=1,
                     title="Demo Session",
                     status="playing",
+                    difficulty="normal",
                     current_scene="main_hall",
                     current_task="Find the first clue",
                     summary="",

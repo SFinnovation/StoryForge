@@ -121,7 +121,42 @@ def mock_module_extract(data) -> "ModuleExtractionOutput":
 
 def mock_opening(data: OpeningInput) -> OpeningOutput:
     char = data.character
-    world_name = data.resolved_world().name
+    world = data.resolved_world()
+    context_text = " ".join(
+        [
+            world.name or "",
+            world.description or "",
+            world.opening_prompt or "",
+            " ".join(data.public_world_facts or []),
+            " ".join(n.name for n in data.seed_npcs),
+        ]
+    ).lower()
+    if any(key in context_text for key in ("krenko", "克伦可", "克仑可", "拉尼卡", "ravnica")):
+        npcs = list(data.seed_npcs) or [
+            OpeningNpc(npc_id="nassius_ven", name="纳休斯·文", description="十会盟官员，雇佣冒险者追捕克伦可"),
+            OpeningNpc(npc_id="krenko", name="克伦可", description="逃脱的鬼怪暴民头目"),
+        ]
+        return OpeningOutput(
+            scene_title="锯齿监狱的委托",
+            narration=(
+                f"拉尼卡第十区的晨雾还未散尽，{char.name}被带到锯齿监狱外一间临时会面室。"
+                "墙外传来波洛斯军团警卫整队的金属声，桌上摊着一份卷宗：画像中的鬼怪咧嘴坏笑，"
+                "名字写着“克伦可”。\n"
+                "十会盟官员纳休斯·文抬起眼，压低声音说明情况：克伦可在转狱途中逃脱，"
+                "骚帮兄弟会也正在满城寻找他。你们需要追查转狱路线、询问警卫与街头线人，"
+                "在帮派冲突失控前找到克伦可，并尽量把他活着带回。"
+            ),
+            main_task="调查克伦可越狱线索，在骚帮兄弟会抢先下手前找到并活捉克伦可。",
+            npcs=npcs,
+            initial_clues=[
+                {"title": "克伦可卷宗", "content": "卷宗记录克伦可是锻炉街附近鬼怪黑帮头目，今日转狱途中逃脱。"},
+                {"title": "骚帮兄弟会威胁", "content": "敌对鬼怪帮派也在寻找克伦可，时间拖延会让街头局势恶化。"},
+            ],
+            initial_facts=[
+                {"content": "冒险发生在拉尼卡第十区。", "fact_type": "world_public"},
+                {"content": "纳休斯·文要求把克伦可活着带回，且不要私自审问。", "fact_type": "player_known"},
+            ],
+        )
     return OpeningOutput(
         scene_title="黑鸦古堡大厅",
         narration=(

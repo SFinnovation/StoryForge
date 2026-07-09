@@ -36,6 +36,7 @@ def list_sessions(
                 "status": s.status,
                 "title": s.title,
                 "current_scene": s.current_scene,
+                "difficulty": s.difficulty,
                 "started_at": s.started_at,
             }
             for s in rows

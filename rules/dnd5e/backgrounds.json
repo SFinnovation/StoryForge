@@ -3,7 +3,7 @@
     {
       "id": "acolyte",
       "name_en": "Acolyte",
-      "name_zh": "Acolyte",
+      "name_zh": "侍僧",
       "skill_proficiencies": [
         "ins",
         "rel"
@@ -12,7 +12,49 @@
         "grants": [],
         "choices": 2
       },
-      "description_text": "You have spent your life in the service of a temple to a specific god or pantheon of gods. You act as an intermediary between the realm of the holy and the mortal world, performing sacred rites and offering sacrifices in order to conduct worshipers into the presence of the divine. You are not necessarily a cleric—performing sacred rites is not the same thing as channeling divine power.   Choose a "
+      "description_text": "You served a temple or religious order and learned rites, doctrine, and how to read the motives of worshipers."
+    },
+    {
+      "id": "criminal",
+      "name_en": "Criminal",
+      "name_zh": "犯罪者",
+      "skill_proficiencies": [
+        "dec",
+        "ste"
+      ],
+      "languages": {
+        "grants": [],
+        "choices": 0
+      },
+      "description_text": "You know the streets, hidden routes, and the quiet language of people who survive outside the law."
+    },
+    {
+      "id": "folk-hero",
+      "name_en": "Folk Hero",
+      "name_zh": "民间英雄",
+      "skill_proficiencies": [
+        "ani",
+        "sur"
+      ],
+      "languages": {
+        "grants": [],
+        "choices": 0
+      },
+      "description_text": "You came from common folk and earned a reputation by standing up when others needed help."
+    },
+    {
+      "id": "sage",
+      "name_en": "Sage",
+      "name_zh": "学者",
+      "skill_proficiencies": [
+        "arc",
+        "his"
+      ],
+      "languages": {
+        "grants": [],
+        "choices": 2
+      },
+      "description_text": "You spent years studying lore, old records, and the hidden patterns behind magic and history."
     }
   ]
 }

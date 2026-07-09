@@ -17,14 +17,34 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///./test_storyforge_ai_db.db")
 
 from backend.app.db.database import SessionLocal
 from backend.app.db.init_db import reset_demo_db
-from backend.app.models.models import Character, GameSession, Message, Report
+from backend.app.models.models import Character, GameSession, Message, Report, World
 from backend.app.repositories import FactRepo, MessageRepo, NpcRepo
 from backend.app.services.clue_pressure import CluePressureService
 from backend.app.services.context_builder import ContextBuilder
 from backend.app.services.state_committer import CommitError, StateCommitter
-from backend.app.services.world_seed import seed_session_world_data
+from backend.app.services.world_seed import MODULE_DATA, seed_session_world_data
 
 PASS = "  [PASS]"
+
+
+def ensure_seedable_world(db, owner_id: int) -> World:
+    """Use a module-backed world so this verifier does not depend on demo seed order."""
+    module_name = next(name for name in MODULE_DATA if "Krenko's Way" in name)
+    world = db.query(World).filter_by(name=module_name).first()
+    if world is None:
+        world = World(
+            name=module_name,
+            type="fantasy",
+            description="Krenko verification world for AI/DB interaction tests.",
+            opening_prompt="Open a concise Krenko investigation scene.",
+            rule_style="lite_dnd",
+            difficulty="normal",
+            is_enabled=1,
+            created_by=owner_id,
+        )
+        db.add(world)
+        db.flush()
+    return world
 
 
 def make_narrative(**over) -> dict:
@@ -65,7 +85,8 @@ def main() -> None:
         # 自建全新会话, 与种子会话/其他验证脚本互不干扰 (可重复执行)
         seed = db.query(GameSession).first()
         assert seed, "先跑 init_db + seed_data"
-        session = GameSession(user_id=seed.user_id, world_id=seed.world_id,
+        world = ensure_seedable_world(db, seed.user_id)
+        session = GameSession(user_id=seed.user_id, world_id=world.id,
                               character_id=seed.character_id,
                               title="verify_ai_db_interaction 专用会话")
         db.add(session)

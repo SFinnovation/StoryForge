@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -6,6 +7,8 @@ from pydantic import BaseModel, Field
 class SessionStartRequest(BaseModel):
     world_id: int
     character_id: int
+    title: str | None = Field(default=None, max_length=100)
+    difficulty: Literal["easy", "normal", "hard", "nightmare"] = "normal"
 
 
 class MessageDTO(BaseModel):
@@ -25,6 +28,7 @@ class SessionDTO(BaseModel):
     current_task: str | None = None
     world_id: int
     character_id: int
+    difficulty: str = "normal"
 
 
 class OpeningDTO(BaseModel):

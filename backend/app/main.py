@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,8 @@ from backend.app.core.config import settings
 from backend.app.core.exceptions import StoryForgeError
 from backend.app.db.init_db import init_db, seed_demo_data
 from backend.app.schemas.api_response import error
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -52,6 +55,15 @@ async def storyforge_error_handler(request: Request, exc: StoryForgeError):
     return JSONResponse(
         status_code=exc.status_code,
         content=error(code_map.get(exc.status_code, 50001), exc.message).model_dump(),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled API error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content=error(50001, "server error").model_dump(),
     )
 
 

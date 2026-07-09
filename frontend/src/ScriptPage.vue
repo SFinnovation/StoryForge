@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { worldsApi } from './api/client'
 import lobbyBackground from '../背景/大厅界面.png'
 import productIcon from '../图标/产品图标.png'
@@ -8,7 +8,7 @@ import dndCover from '../游戏种类/龙与地下城.jpg'
 import cocCover from '../游戏种类/克苏鲁.jpg'
 import customCover from '../游戏种类/世界观.jpg'
 
-const emit = defineEmits(['navigate', 'logout'])
+const emit = defineEmits(['navigate', 'session-created', 'logout', 'back-button-hidden'])
 
 const props = defineProps({
   currentPage: {
@@ -113,6 +113,29 @@ const fallbackWorldviews = [
 const backendWorldIdByKind = ref({})
 const isLoadingWorldviews = ref(false)
 const worldviewsError = ref('')
+const showRoomSetup = ref(false)
+const roomSetupStatus = ref('')
+const isCreatingRoom = ref(false)
+const pendingRoomTarget = ref(null)
+
+watch(showRoomSetup, (isOpen) => {
+  emit('back-button-hidden', isOpen)
+}, { immediate: true })
+
+const roomSetupForm = reactive({
+  roomName: '',
+  inviteCode: '',
+  maxPlayers: 4,
+  roomType: 'public',
+  difficulty: 'normal'
+})
+
+const difficulties = [
+  { value: 'easy', label: '轻松' },
+  { value: 'normal', label: '标准' },
+  { value: 'hard', label: '困难' },
+  { value: 'nightmare', label: '噩梦' }
+]
 
 const classifyPresetWorldview = (worldview) => {
   if (worldview.title.includes('DND')) return 'dnd'
@@ -178,12 +201,62 @@ const selectWorldview = (worldviewId) => {
   }
 }
 
-const enterWorldview = () => {
-  emit('navigate', '角色', selectedData.value)
+const roomTargetTitle = computed(() => (
+  pendingRoomTarget.value?.selectedModule?.name ||
+  pendingRoomTarget.value?.title ||
+  '新冒险'
+))
+
+const currentRoomSettings = () => ({
+  roomName: roomSetupForm.roomName.trim(),
+  inviteCode: roomSetupForm.inviteCode.trim(),
+  maxPlayers: roomSetupForm.maxPlayers,
+  roomType: roomSetupForm.roomType,
+  difficulty: roomSetupForm.difficulty
+})
+
+const openRoomSetup = (target) => {
+  pendingRoomTarget.value = target
+  roomSetupStatus.value = ''
+  roomSetupForm.roomName = `${target?.selectedModule?.name || target?.title || '新冒险'}团`
+  roomSetupForm.inviteCode = ''
+  roomSetupForm.maxPlayers = 4
+  roomSetupForm.roomType = 'public'
+  roomSetupForm.difficulty = 'normal'
+  showRoomSetup.value = true
+}
+
+const closeRoomSetup = () => {
+  if (isCreatingRoom.value) return
+  showRoomSetup.value = false
+  roomSetupStatus.value = ''
+}
+
+const continueToRoleCreation = (target, settings) => {
+  showRoomSetup.value = false
+  emit('navigate', '角色', {
+    ...target,
+    roomSettings: settings
+  })
+}
+
+const handleRoomSetupSubmit = () => {
+  if (isCreatingRoom.value || !pendingRoomTarget.value) return
+
+  const settings = currentRoomSettings()
+  if (!settings.roomName) {
+    roomSetupStatus.value = '请填写房间名称。'
+    return
+  }
+
+  isCreatingRoom.value = true
+  roomSetupStatus.value = ''
+  continueToRoleCreation(pendingRoomTarget.value, settings)
+  isCreatingRoom.value = false
 }
 
 const enterModule = (module) => {
-  emit('navigate', '角色', {
+  openRoomSetup({
     ...selectedData.value,
     selectedModule: module,
     backendId: module.worldId || selectedData.value.backendId
@@ -395,11 +468,95 @@ onMounted(async () => {
                 </div>
               </button>
             </div>
-            <button class="primary-enter" @click="enterWorldview">进入 {{ selectedData.shortTitle }} 世界观</button>
           </section>
         </aside>
       </section>
     </main>
+
+    <div class="modal-overlay" v-if="showRoomSetup" @click="closeRoomSetup">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <div>
+            <p class="modal-kicker">{{ roomTargetTitle }}</p>
+            <h3 class="modal-title">创建房间</h3>
+          </div>
+          <button class="modal-close" @click="closeRoomSetup">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form class="modal-form" @submit.prevent="handleRoomSetupSubmit">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">房间名称</label>
+              <input
+                v-model="roomSetupForm.roomName"
+                type="text"
+                class="form-input"
+                placeholder="请输入房间名称"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">房间邀请码</label>
+              <input
+                v-model="roomSetupForm.inviteCode"
+                type="text"
+                class="form-input"
+                placeholder="可选，留空则自动生成"
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">人数上限</label>
+              <select v-model="roomSetupForm.maxPlayers" class="form-select">
+                <option :value="1">1 人</option>
+                <option :value="2">2 人</option>
+                <option :value="3">3 人</option>
+                <option :value="4">4 人</option>
+                <option :value="5">5 人</option>
+                <option :value="6">6 人</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">挑战难度</label>
+            <select v-model="roomSetupForm.difficulty" class="form-select">
+              <option v-for="diff in difficulties" :key="diff.value" :value="diff.value">{{ diff.label }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">房间类型</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" v-model="roomSetupForm.roomType" value="public" />
+                <span>公开房间</span>
+              </label>
+              <label class="radio-item">
+                <input type="radio" v-model="roomSetupForm.roomType" value="private" />
+                <span>私密房间</span>
+              </label>
+            </div>
+          </div>
+
+          <p v-if="roomSetupStatus" class="room-setup-status">{{ roomSetupStatus }}</p>
+
+          <div class="modal-footer">
+            <button type="button" class="panel-button secondary" @click="closeRoomSetup">取消</button>
+            <button type="submit" class="panel-button primary solid" :disabled="isCreatingRoom">
+              {{ isCreatingRoom ? '创建中...' : '创建房间' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -476,6 +633,9 @@ onMounted(async () => {
 }
 
 .nav-logo {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -509,6 +669,9 @@ onMounted(async () => {
 }
 
 .nav-menu {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -544,6 +707,9 @@ onMounted(async () => {
 }
 
 .nav-user {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -677,8 +843,7 @@ onMounted(async () => {
 .filter-btn,
 .grid-btn,
 .view-all-btn,
-.card-action,
-.primary-enter {
+.card-action {
   border: 1px solid rgba(245, 187, 88, 0.18);
   border-radius: 14px;
   background: rgba(8, 12, 18, 0.62);
@@ -843,8 +1008,7 @@ onMounted(async () => {
 }
 
 .card-action,
-.view-all-btn,
-.primary-enter {
+.view-all-btn {
   min-height: 46px;
   padding: 0 18px;
   font-weight: 700;
@@ -994,9 +1158,167 @@ onMounted(async () => {
   color: #f2ead9;
 }
 
-.primary-enter {
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 4, 8, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.modal-content {
+  width: min(720px, calc(100vw - 32px));
+  padding: 28px;
+  border-radius: 22px;
+  border: 1px solid rgba(241, 191, 94, 0.24);
+  background:
+    linear-gradient(180deg, rgba(14, 17, 23, 0.96), rgba(8, 10, 14, 0.98)),
+    #090b10;
+  box-shadow: 0 34px 52px rgba(0, 0, 0, 0.42);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.modal-kicker {
+  margin-bottom: 4px;
+  color: rgba(111, 192, 230, 0.92);
+  font-size: 0.9rem;
+}
+
+.modal-title {
+  color: #f5d18b;
+  font-size: 1.56rem;
+}
+
+.modal-close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(241, 191, 94, 0.18);
+  border-radius: 50%;
+  background: rgba(16, 17, 22, 0.9);
+  color: #f2cb7a;
+  cursor: pointer;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.form-row > .form-group:only-child {
+  grid-column: 1 / -1;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  color: rgba(245, 226, 192, 0.84);
+  font-size: 0.95rem;
+}
+
+.form-input,
+.form-select {
   width: 100%;
-  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(105, 147, 173, 0.24);
+  border-radius: 14px;
+  background: rgba(10, 16, 22, 0.88);
+  color: #f6ead1;
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: rgba(181, 190, 201, 0.52);
+}
+
+.form-input:focus,
+.form-select:focus {
+  border-color: rgba(104, 197, 240, 0.5);
+  box-shadow: 0 0 0 4px rgba(52, 149, 192, 0.12);
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.radio-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(245, 229, 194, 0.9);
+}
+
+.radio-item input {
+  accent-color: #f1bb5e;
+}
+
+.room-setup-status {
+  color: #7fd7ff;
+  font-size: 0.95rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.panel-button {
+  border: 1px solid rgba(243, 191, 92, 0.26);
+  background: rgba(30, 20, 8, 0.48);
+  color: #f4ce86;
+  cursor: pointer;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.panel-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(243, 191, 92, 0.42);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
+}
+
+.panel-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+  box-shadow: none;
+}
+
+.panel-button.primary {
+  padding: 12px 22px;
+  border-radius: 14px;
+  color: #fde7bf;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.panel-button.secondary {
+  padding: 12px 22px;
+  border-radius: 14px;
 }
 
 @media (max-width: 1280px) {
@@ -1021,22 +1343,19 @@ onMounted(async () => {
 
 @media (max-width: 900px) {
   .navbar {
-    grid-template-columns: 1fr;
-    justify-items: start;
-    gap: 16px;
-    padding: 18px 18px 12px;
+    grid-template-columns: 1fr auto 1fr;
+    justify-items: stretch;
+    gap: 12px;
+    padding: 14px 18px 10px;
   }
 
   .nav-menu {
-    width: 100%;
-    justify-content: space-between;
-    gap: 12px;
-    overflow-x: auto;
+    display: none;
   }
 
   .nav-user {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
+    justify-content: flex-end;
   }
 
   .worldview-shell {

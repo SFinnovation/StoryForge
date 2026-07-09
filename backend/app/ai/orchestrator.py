@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from backend.app.ai.schemas.action_parse import ActionParseInput, ActionParseOutput
 from backend.app.ai.schemas.agent_result import AgentResult
 from backend.app.ai.schemas.character import CharacterCard, WorldContext
@@ -16,6 +18,9 @@ from backend.app.ai.services.opening_agent import OpeningAgent
 from backend.app.ai.services.revision_loop import RevisionLoop
 from backend.app.ai.services.rulebook_extractor_agent import RulebookExtractorAgent
 from backend.app.ai.services.summary_agent import SummaryAgent
+from backend.app.ai.services.fallbacks import mock_opening
+
+logger = logging.getLogger(__name__)
 
 
 class AIModule:
@@ -36,7 +41,12 @@ class AIModule:
         self.module_extractor_agent = ModuleExtractorAgent()
 
     async def generate_opening(self, data: OpeningInput) -> AgentResult[OpeningOutput]:
-        output, llm = await self.opening_agent.generate(data)
+        try:
+            output, llm = await self.opening_agent.generate(data)
+        except Exception as exc:
+            logger.warning("OpeningAgent failed; using local fallback opening: %s", exc)
+            output = mock_opening(data)
+            llm = None
         return AgentResult(
             output=output,
             tokens_used=llm.tokens_used if llm else 0,

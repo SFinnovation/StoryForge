@@ -25,6 +25,19 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+def _session_dto(session: GameSession) -> SessionDTO:
+    return SessionDTO(
+        id=session.id,
+        status=session.status,
+        title=session.title,
+        current_scene=session.current_scene,
+        current_task=session.current_task,
+        world_id=session.world_id,
+        character_id=session.character_id,
+        difficulty=session.difficulty or "normal",
+    )
+
+
 def get_playing_session(db: Session, session_id: int, user_id: int) -> GameSession:
     session = db.get(GameSession, session_id)
     if session is None:
@@ -56,8 +69,9 @@ async def start_session(db: Session, user_id: int, payload: SessionStartRequest)
         user_id=user_id,
         world_id=world.id,
         character_id=character.id,
-        title=world.name,
+        title=(payload.title or "").strip() or world.name,
         status="playing",
+        difficulty=payload.difficulty,
         started_at=_now(),
     )
     db.add(session)
@@ -83,15 +97,7 @@ async def start_session(db: Session, user_id: int, payload: SessionStartRequest)
 
     visible_npcs = [n.model_dump() for n in opening.npcs]
     return SessionStartData(
-        session=SessionDTO(
-            id=session.id,
-            status=session.status,
-            title=session.title,
-            current_scene=session.current_scene,
-            current_task=session.current_task,
-            world_id=session.world_id,
-            character_id=session.character_id,
-        ),
+        session=_session_dto(session),
         opening=OpeningDTO(
             scene_title=opening.scene_title,
             narration=opening.narration,
@@ -120,28 +126,12 @@ def end_session(db: Session, session_id: int, user_id: int) -> SessionDTO:
     if session.user_id != user_id:
         raise StoryForgeError("forbidden", status_code=403)
     if session.status == "finished":
-        return SessionDTO(
-            id=session.id,
-            status=session.status,
-            title=session.title,
-            current_scene=session.current_scene,
-            current_task=session.current_task,
-            world_id=session.world_id,
-            character_id=session.character_id,
-        )
+        return _session_dto(session)
     session.status = "finished"
     session.ended_at = _now()
     db.commit()
     db.refresh(session)
-    return SessionDTO(
-        id=session.id,
-        status=session.status,
-        title=session.title,
-        current_scene=session.current_scene,
-        current_task=session.current_task,
-        world_id=session.world_id,
-        character_id=session.character_id,
-    )
+    return _session_dto(session)
 
 
 def get_session_detail(db: Session, session_id: int, user_id: int) -> dict:
@@ -150,15 +140,7 @@ def get_session_detail(db: Session, session_id: int, user_id: int) -> dict:
         raise StoryForgeError("session not found", status_code=404)
     messages = list_messages(db, session_id, user_id)
     return {
-        "session": SessionDTO(
-            id=session.id,
-            status=session.status,
-            title=session.title,
-            current_scene=session.current_scene,
-            current_task=session.current_task,
-            world_id=session.world_id,
-            character_id=session.character_id,
-        ).model_dump(),
+        "session": _session_dto(session).model_dump(),
         "messages": [m.model_dump() for m in messages],
     }
 

@@ -13,7 +13,7 @@ class RoomCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     description: str | None = None
     visibility: str = "private"
-    max_players: int = Field(default=6, ge=2, le=12)
+    max_players: int = Field(default=6, ge=1, le=12)
 
 
 class RoomJoinRequest(BaseModel):
@@ -61,6 +61,7 @@ class RoomAskRequest(BaseModel):
 class RoomMemberDTO(BaseModel):
     user_id: int
     character_id: int | None = None
+    character_name: str | None = None
     role: str
     display_name: str | None = None
     online_status: str = "offline"

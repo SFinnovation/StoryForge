@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { sessionsApi } from './api/client'
 import systemBackground from '../背景/系统主界面.png'
 
-const emit = defineEmits(['navigate', 'logout'])
+const emit = defineEmits(['navigate', 'logout', 'back-button-hidden'])
 
 const props = defineProps({
   currentPage: {
@@ -442,9 +442,9 @@ onMounted(loadSessions)
   left: 0;
   right: 0;
   height: 64px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 40px;
   background: rgba(9, 8, 6, 0.98);
   backdrop-filter: blur(12px);
@@ -453,6 +453,9 @@ onMounted(loadSessions)
 }
 
 .nav-logo {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -482,6 +485,9 @@ onMounted(loadSessions)
 }
 
 .nav-menu {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   display: flex;
   gap: 4px;
 }
@@ -509,6 +515,9 @@ onMounted(loadSessions)
 }
 
 .nav-user {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 14px;
